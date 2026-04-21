@@ -1,5 +1,5 @@
 import { NeedEntity } from '../shared/types';
-import { db } from './mockFirestore';
+import { db } from './firebaseDb';
 
 function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length === 0 || vecB.length === 0 || vecA.length !== vecB.length) return 0;

@@ -16,6 +16,7 @@ export interface NeedEntity {
   reportedAt: number; // timestamp
   rawInputs: string[];
   embedding?: number[]; // Added for vector search demo
+  originalLanguage?: string;
 }
 
 export interface VolunteerProfile {

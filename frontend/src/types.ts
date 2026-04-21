@@ -16,6 +16,7 @@ export interface NeedEntity {
   reportedAt: number; // timestamp
   rawInputs: string[];
   embedding?: number[]; 
+  originalLanguage?: string;
 }
 
 export interface VolunteerProfile {

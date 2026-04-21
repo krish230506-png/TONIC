@@ -4,7 +4,7 @@ import multer from 'multer';
 import crypto from 'crypto';
 import { AIService } from './aiService';
 import { processDeduplication, haversineDistance } from './deduplication';
-import { db } from './mockFirestore';
+import { db } from './firebaseDb';
 import { NeedEntity } from '../shared/types';
 
 const app = express();
@@ -70,7 +70,8 @@ app.post('/ingest', upload.single('image'), async (req, res) => {
       status: 'OPEN',
       reportedAt: Date.now(),
       rawInputs: [rawText],
-      embedding
+      embedding,
+      originalLanguage: extractedData.originalLanguage
     };
 
     // 3. Deduplication + Velocity calculation

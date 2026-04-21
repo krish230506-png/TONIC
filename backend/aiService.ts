@@ -10,14 +10,16 @@ export class AIService {
   
   static async extractNeed(text: string, base64Image?: string): Promise<Partial<NeedEntity> | null> {
     const prompt = `
-      You are an emergency response AI. Your task is to extract distress signal data from messy text (often Hinglish, Hindi, or English) or OCR from images.
+      You are an emergency response AI. Your task is to extract distress signal data from messy text.
+      CRITICAL: You must explicitly support and understand mixed languages including Hinglish, Hindi, Bengali, Tamil, Odia, Gujarati, Marathi, Telugu, Kannada, and Malayalam.
       
       RULES:
       - If a field is unknown, omit it or return null. DO NOT hallucinate.
-      - Handle mixed language (Hinglish) and typos.
-      - Extract 'location': Try to find the area name. For lat/lng, guess approximate coordinates if it's a known Mumbai landmark, otherwise null.
+      - Handle native scripts and mixed transliterations fluently.
+      - Extract 'location': Try to find the area name. For lat/lng, guess approximate coordinates if it's a known landmark, otherwise null.
       - Extract 'crisisType': Map to EXACTLY ONE of: food, medical, shelter, water, infrastructure.
-      - Extract 'urgencyReasoning': A very short 1-sentence chain-of-thought of why this is urgent.
+      - Extract 'urgencyReasoning': A very short 1-sentence chain-of-thought of why this is urgent (Always translate this to English).
+      - Extract 'originalLanguage': Detect and output the primary language the input was written in (e.g., 'Tamil', 'Hinglish', 'Bengali').
       - Extract 'estimatedScale': A number representing how many people are affected.
 
       Input Text: "${text}"
@@ -53,6 +55,7 @@ export class AIService {
               },
               crisisType: { type: Type.STRING, enum: ['food', 'medical', 'shelter', 'water', 'infrastructure'] },
               urgencyReasoning: { type: Type.STRING },
+              originalLanguage: { type: Type.STRING },
               estimatedScale: { type: Type.NUMBER }
             },
             required: ['location', 'crisisType', 'urgencyReasoning']
