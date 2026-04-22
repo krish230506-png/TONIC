@@ -12,75 +12,62 @@ class MockFirestore {
   }
 
   private seedVolunteers() {
-    const v1: VolunteerProfile = {
-      id: crypto.randomUUID(),
-      name: 'Rahul Bhai',
-      preferredLanguage: 'Hindi',
-      skills: ['medical', 'water distribution'],
-      // Approximate coords roughly in a city
-      locationCoords: { lat: 19.0760, lng: 72.8777 }, // Mumbai
-      reliabilityRate: 0.9,
-      hoursLast30Days: 10,
-      pastContributions: ['water distribution in Dharavi last month']
-    };
-    const v2: VolunteerProfile = {
-      id: crypto.randomUUID(),
-      name: 'Priya',
-      preferredLanguage: 'English',
-      skills: ['food', 'shelter'],
-      locationCoords: { lat: 19.0800, lng: 72.8800 },
-      reliabilityRate: 0.7,
-      hoursLast30Days: 25, // Burnout: >20 hours
-      pastContributions: ['food packet sorting']
-    };
-    const v3: VolunteerProfile = {
-      id: crypto.randomUUID(),
-      name: 'Amit',
-      preferredLanguage: 'Hinglish',
-      skills: ['infrastructure', 'rescue'],
-      locationCoords: { lat: 19.0650, lng: 72.8700 }, // Nearby
-      reliabilityRate: 0.85,
-      hoursLast30Days: 5,
-      pastContributions: ['clearing debris in Andheri']
+    const majorCities = [
+      { name: 'Mumbai', lat: 19.0760, lng: 72.8777 },
+      { name: 'Delhi', lat: 28.6139, lng: 77.2090 },
+      { name: 'Bangalore', lat: 12.9716, lng: 77.5946 },
+      { name: 'Hyderabad', lat: 17.3850, lng: 78.4867 },
+      { name: 'Chennai', lat: 13.0827, lng: 80.2707 },
+      { name: 'Kolkata', lat: 22.5726, lng: 88.3639 },
+      { name: 'Pune', lat: 18.5204, lng: 73.8567 },
+    ];
+
+    const minorCities = [
+      { name: 'Ahmedabad', lat: 23.0225, lng: 72.5714 },
+      { name: 'Jaipur', lat: 26.9124, lng: 75.7873 },
+      { name: 'Lucknow', lat: 26.8467, lng: 80.9462 },
+      { name: 'Kanpur', lat: 26.4499, lng: 80.3319 },
+      { name: 'Nagpur', lat: 21.1458, lng: 79.0882 },
+      { name: 'Indore', lat: 22.7196, lng: 75.8577 },
+      { name: 'Patna', lat: 25.5941, lng: 85.1376 },
+      { name: 'Bhopal', lat: 23.2599, lng: 77.4126 },
+      { name: 'Surat', lat: 21.1702, lng: 72.8311 },
+      { name: 'Vizag', lat: 17.6868, lng: 83.2185 },
+      { name: 'Noida', lat: 28.5355, lng: 77.3910 },
+      { name: 'Gurgaon', lat: 28.4595, lng: 77.0266 },
+      { name: 'Chandigarh', lat: 30.7333, lng: 76.7794 },
+      { name: 'Kochi', lat: 9.9312, lng: 76.2673 },
+    ];
+
+    const skillsPool = ['medical', 'food', 'water distribution', 'shelter', 'infrastructure', 'rescue'];
+    const languages = ['Hindi', 'English', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Kannada', 'Marathi', 'Gujarati'];
+    const names = ['Aryan', 'Sanya', 'Ishaan', 'Ananya', 'Kabir', 'Zoya', 'Aditya', 'Mira', 'Rohan', 'Dia', 'Vihaan', 'Sara', 'Arjun', 'Kyra', 'Dev', 'Avni', 'Rishi', 'Tara', 'Karan', 'Isha'];
+
+    const createVolunteers = (city: { name: string, lat: number, lng: number }, count: number) => {
+      for (let i = 0; i < count; i++) {
+        const id = crypto.randomUUID();
+        // Add jitter (~5-10km)
+        const jitterLat = (Math.random() - 0.5) * 0.1;
+        const jitterLng = (Math.random() - 0.5) * 0.1;
+        
+        const volunteer: VolunteerProfile = {
+          id,
+          name: `${names[i % names.length]} (${city.name})`,
+          preferredLanguage: languages[Math.floor(Math.random() * languages.length)],
+          skills: [skillsPool[Math.floor(Math.random() * skillsPool.length)], skillsPool[Math.floor(Math.random() * skillsPool.length)]],
+          locationCoords: { lat: city.lat + jitterLat, lng: city.lng + jitterLng },
+          reliabilityRate: 0.6 + Math.random() * 0.4,
+          hoursLast30Days: Math.floor(Math.random() * 25),
+          pastContributions: [`Helped during crisis in ${city.name} area.`]
+        };
+        this.volunteers.set(id, volunteer);
+      }
     };
 
-    const v4: VolunteerProfile = {
-      id: crypto.randomUUID(),
-      name: 'Vikram',
-      preferredLanguage: 'Hindi',
-      skills: ['medical', 'rescue'],
-      locationCoords: { lat: 28.6129, lng: 77.2295 }, // India Gate, Delhi
-      reliabilityRate: 0.95,
-      hoursLast30Days: 12,
-      pastContributions: ['South Delhi medical camps']
-    };
-    const v5: VolunteerProfile = {
-      id: crypto.randomUUID(),
-      name: 'Anjali',
-      preferredLanguage: 'English',
-      skills: ['food', 'water distribution'],
-      locationCoords: { lat: 28.5823, lng: 77.0500 }, // Dwarka, Delhi
-      reliabilityRate: 0.88,
-      hoursLast30Days: 18,
-      pastContributions: ['Community kitchens in Dwarka']
-    };
-    const v6: VolunteerProfile = {
-      id: crypto.randomUUID(),
-      name: 'Rohan',
-      preferredLanguage: 'Hinglish',
-      skills: ['infrastructure', 'shelter'],
-      locationCoords: { lat: 28.5204, lng: 77.2131 }, // Saket, Delhi
-      reliabilityRate: 0.82,
-      hoursLast30Days: 8,
-      pastContributions: ['Setting up tents in Saket']
-    };
-
-    this.volunteers.set(v1.id, v1);
-    this.volunteers.set(v2.id, v2);
-    this.volunteers.set(v3.id, v3);
-    this.volunteers.set(v4.id, v4);
-    this.volunteers.set(v5.id, v5);
-    this.volunteers.set(v6.id, v6);
+    majorCities.forEach(city => createVolunteers(city, 20));
+    minorCities.forEach(city => createVolunteers(city, 10));
+    
+    console.log(`✅ Seeded ${this.volunteers.size} volunteers across ${majorCities.length + minorCities.length} cities.`);
   }
 
   // --- Requirements for Needs ---
