@@ -44,9 +44,43 @@ class MockFirestore {
       pastContributions: ['clearing debris in Andheri']
     };
 
+    const v4: VolunteerProfile = {
+      id: crypto.randomUUID(),
+      name: 'Vikram',
+      preferredLanguage: 'Hindi',
+      skills: ['medical', 'rescue'],
+      locationCoords: { lat: 28.6129, lng: 77.2295 }, // India Gate, Delhi
+      reliabilityRate: 0.95,
+      hoursLast30Days: 12,
+      pastContributions: ['South Delhi medical camps']
+    };
+    const v5: VolunteerProfile = {
+      id: crypto.randomUUID(),
+      name: 'Anjali',
+      preferredLanguage: 'English',
+      skills: ['food', 'water distribution'],
+      locationCoords: { lat: 28.5823, lng: 77.0500 }, // Dwarka, Delhi
+      reliabilityRate: 0.88,
+      hoursLast30Days: 18,
+      pastContributions: ['Community kitchens in Dwarka']
+    };
+    const v6: VolunteerProfile = {
+      id: crypto.randomUUID(),
+      name: 'Rohan',
+      preferredLanguage: 'Hinglish',
+      skills: ['infrastructure', 'shelter'],
+      locationCoords: { lat: 28.5204, lng: 77.2131 }, // Saket, Delhi
+      reliabilityRate: 0.82,
+      hoursLast30Days: 8,
+      pastContributions: ['Setting up tents in Saket']
+    };
+
     this.volunteers.set(v1.id, v1);
     this.volunteers.set(v2.id, v2);
     this.volunteers.set(v3.id, v3);
+    this.volunteers.set(v4.id, v4);
+    this.volunteers.set(v5.id, v5);
+    this.volunteers.set(v6.id, v6);
   }
 
   // --- Requirements for Needs ---
