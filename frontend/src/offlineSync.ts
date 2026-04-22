@@ -14,6 +14,13 @@ export async function initDB() {
   });
 }
 
+// Wipe all pending offline reports (use when resetting for demo)
+export async function clearOfflineQueue(): Promise<void> {
+  const db = await initDB();
+  await db.clear(SYNC_STORE_NAME);
+  console.log('🗑️ Offline queue cleared.');
+}
+
 // Save a report offline
 export async function saveOfflineReport(payload: { text?: string, imageBase64?: string }) {
   const db = await initDB();
@@ -29,9 +36,9 @@ export async function syncOfflineReports(apiBaseUrl: string, onSyncStart?: (coun
   if (!navigator.onLine) return 0;
   
   const db = await initDB();
-  const tx = db.transaction(SYNC_STORE_NAME, 'readwrite');
-  const store = tx.objectStore(SYNC_STORE_NAME);
-  const reports = await store.getAll();
+
+  // Read all pending reports first (separate transaction)
+  const reports = await db.getAll(SYNC_STORE_NAME);
   
   if (reports.length === 0) return 0;
   
@@ -46,13 +53,14 @@ export async function syncOfflineReports(apiBaseUrl: string, onSyncStart?: (coun
       
       await axios.post(`${apiBaseUrl}/ingest`, payload);
       
-      await store.delete(report.id);
+      // Open a fresh transaction just for this delete — don't hold one open across delays
+      await db.delete(SYNC_STORE_NAME, report.id);
       synced++;
       
-      // Delay to avoid bombarding the AI API (stay under RPM limits)
+      // Pace requests to stay under API rate limits
       if (synced < reports.length) {
-        console.log("Waiting 30s before next sync to honor API rate limits...");
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        console.log("Waiting 5s before next sync to honor API rate limits...");
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
     } catch (e) {
       console.error(`Failed to sync report ${report.id}`, e);
@@ -60,3 +68,4 @@ export async function syncOfflineReports(apiBaseUrl: string, onSyncStart?: (coun
   }
   return synced;
 }
+

@@ -6,7 +6,7 @@ import L from 'leaflet';
 import 'leaflet.heat';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { BoltIcon, ExclamationTriangleIcon, UserGroupIcon, PaperAirplaneIcon, SignalIcon, SignalSlashIcon, MicrophoneIcon, StopCircleIcon, BellAlertIcon } from '@heroicons/react/24/outline';
-import { saveOfflineReport, syncOfflineReports } from './offlineSync';
+import { saveOfflineReport, syncOfflineReports, clearOfflineQueue } from './offlineSync';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -72,13 +72,14 @@ export default function App() {
   const [ingestText, setIngestText] = useState('');
   const [isIngesting, setIsIngesting] = useState(false);
 
-  // Audio Recording
+  // Audio Recording — now uses Web Speech API (SpeechRecognition)
   const [isRecording, setIsRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Alerts
+  // UI State
+  const [mapLayer, setMapLayer] = useState<'dark' | 'satellite'>('dark');
   const [alertBanner, setAlertBanner] = useState<NeedEntity | null>(null);
 
   useEffect(() => {
@@ -162,60 +163,76 @@ export default function App() {
   };
 
   const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-         const reader = new FileReader();
-         reader.readAsDataURL(audioBlob);
-         reader.onloadend = async () => {
-            const base64data = (reader.result as string).split(',')[1];
-            await processAudio(base64data);
-         }
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      
-      // Auto-stop after 15 seconds
-      setTimeout(() => {
-         if (mediaRecorder.state === "recording") stopRecording();
-      }, 15000);
-
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("Microphone access denied or unavailable.");
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in this browser. Please use Chrome and type your report.");
+      return;
     }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN'; // Supports Indian English, Hindi accents
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setIngestText(transcript);
+      setIsRecording(false);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      setIsRecording(false);
+      if (event.error === 'not-allowed') {
+        alert('Microphone access denied. Please allow microphone access in your browser settings.');
+      } else {
+        setIngestText('[Voice input failed. Please type your report below.]');
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    (mediaRecorderRef.current as any) = recognition;
+    recognition.start();
+
+    // Auto-stop after 15 seconds
+    setTimeout(() => {
+      try { recognition.stop(); } catch {}
+    }, 15000);
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+    const recognition = mediaRecorderRef.current as any;
+    if (recognition) {
+      try { recognition.stop(); } catch {}
       setIsRecording(false);
     }
   };
 
-  const processAudio = async (base64Audio: string) => {
-    setIsIngesting(true);
+  // processAudio kept for compatibility but no longer used with Web Speech API
+  const processAudio = async (_base64Audio: string) => {};
+
+
+
+  const handleClearAll = async () => {
+    if (!window.confirm("Are you sure you want to clear all rescue signals and the offline queue?")) return;
     try {
-       const response = await axios.post(`${API_BASE}/ingest-audio`, { base64Audio });
-       // Auto-fill form
-       const aiStructured = response.data;
-       setIngestText(`[VOICE AUTO-FILL (${aiStructured.originalLanguage})]\nCrisis: ${aiStructured.crisisType}\nLocation: ${aiStructured.location?.name}\nScale: ~${aiStructured.estimatedScale} people\nReason reasoning: ${aiStructured.urgencyReasoning}`);
+      await axios.delete(`${API_BASE}/needs`);
+      await clearOfflineQueue();
+      setNeeds([]);
+      setSelectedNeed(null);
+      setDispatchResult(null);
+      setAlertBanner(null);
     } catch (e) {
-       console.error(e);
-       alert("Failed to parse audio. Try typing directly.");
-    } finally {
-       setIsIngesting(false);
+      console.error('Failed to clear:', e);
+      alert("Failed to clear history.");
     }
   };
 
@@ -245,18 +262,6 @@ export default function App() {
     }
   };
 
-  const handleClearAll = async () => {
-    if (!window.confirm("Are you sure you want to clear all rescue signals?")) return;
-    try {
-      await axios.delete(`${API_BASE}/needs`);
-      setNeeds([]);
-      setSelectedNeed(null);
-    } catch (error) {
-      console.error(error);
-      alert("Failed to clear history.");
-    }
-  };
-
   const getSlaStatus = (reportedAt: number) => {
     const mins = differenceInMinutes(Date.now(), reportedAt);
     if (mins < 30) return { color: 'bg-green-500', text: 'Within SLA' };
@@ -279,7 +284,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#121212] text-gray-100 flex flex-col font-sans relative">
-      <header className="bg-[#1e1e1e] p-4 flex items-center justify-between border-b border-gray-800 shadow-lg relative z-20">
+      <header className="fixed top-0 left-0 w-full z-[1001] p-4 flex items-center justify-between border-b border-gray-800 shadow-lg glass-header">
         <div className="flex items-center space-x-3">
           <BoltIcon className="h-8 w-8 text-blue-500" />
           <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
@@ -327,7 +332,7 @@ export default function App() {
         </div>
       )}
 
-      <main className="flex-1 grid grid-cols-12 gap-6 p-6 h-[calc(100vh-73px)]">
+      <main className="flex-1 grid grid-cols-12 gap-6 p-6 pt-24 h-[calc(100vh)]">
         
         {/* PANEL 1: Live Ingestion Feed */}
         <section className="col-span-3 bg-[#1e1e1e] rounded-xl border border-gray-800 flex flex-col shadow-xl">
@@ -353,14 +358,12 @@ export default function App() {
                   className="w-full bg-[#2a2a2a] border border-gray-700 rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 min-h-[80px]"
                 />
                 
-                {/* Voice Record Button */}
+                {/* Voice Record Button — click to start, click again to stop */}
                 <button 
                   type="button"
-                  onMouseDown={startRecording}
-                  onMouseUp={stopRecording}
-                  onMouseLeave={stopRecording}
+                  onClick={isRecording ? stopRecording : startRecording}
                   className={`absolute bottom-[42px] right-2 p-2 rounded-full transition-all ${isRecording ? 'bg-red-600 animate-pulse scale-110' : 'bg-[#1e1e1e] hover:bg-gray-700 border border-gray-600 text-gray-300'}`}
-                  title="Hold to Record (15s max)"
+                  title={isRecording ? 'Click to stop recording' : 'Click to start voice input'}
                 >
                   {isRecording ? <StopCircleIcon className="w-5 h-5 text-white" /> : <MicrophoneIcon className="w-5 h-5" />}
                 </button>
@@ -378,7 +381,7 @@ export default function App() {
               return (
                 <div 
                   key={need.id} 
-                  className={`p-4 rounded-lg border transition-all cursor-pointer hover:bg-[#2a2a2a] relative ${selectedNeed?.id === need.id ? 'border-blue-500 bg-[#252535]' : 'border-gray-700 bg-[#252525]'}`}
+                  className={`p-4 rounded-lg border transition-all cursor-pointer hover:bg-[#2a2a2a] relative animate-slide-in ${selectedNeed?.id === need.id ? 'border-blue-500 bg-[#252535]' : 'border-gray-700 bg-[#252525]'}`}
                   onClick={() => { setSelectedNeed(need); setDispatchResult(null); }}
                 >
                   {/* Golden Hour Bar */}
@@ -413,10 +416,25 @@ export default function App() {
 
         <section className="col-span-6 bg-[#1e1e1e] rounded-xl border border-gray-800 overflow-hidden shadow-xl flex flex-col pt-1 relative">
           <div className="p-4 absolute z-[1000] w-full pointer-events-none">
-            <div className="inline-block bg-[#121212]/80 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 pointer-events-auto shadow-lg">
+            <div className="inline-block bg-[#121212]/80 backdrop-blur-md px-4 py-2 rounded-full border border-gray-700 pointer-events-auto shadow-lg flex items-center space-x-4">
               <h2 className="text-sm font-semibold flex items-center">
                  48h Crisis Heatmap & Dispatch Engine
               </h2>
+              <div className="h-4 w-px bg-gray-700"></div>
+              <div className="flex bg-[#222] p-0.5 rounded-lg border border-gray-800">
+                <button 
+                  onClick={() => setMapLayer('dark')}
+                  className={`px-2 py-1 text-[10px] rounded-md transition-all ${mapLayer === 'dark' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  Dark
+                </button>
+                <button 
+                  onClick={() => setMapLayer('satellite')}
+                  className={`px-2 py-1 text-[10px] rounded-md transition-all ${mapLayer === 'satellite' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  Satellite
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex-1 relative z-10">
@@ -426,8 +444,14 @@ export default function App() {
                 zoom={selectedNeed ? 14 : 12} 
               />
               <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                url={mapLayer === 'dark' 
+                  ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                }
+                attribution={mapLayer === 'dark'
+                  ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                  : 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                }
               />
               {needs.map(need => (
                 <Circle

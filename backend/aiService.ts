@@ -79,15 +79,12 @@ export class AIService {
     }
   }
 
-  static async extractNeedFromAudio(base64Audio: string): Promise<Partial<NeedEntity> | null> {
-    const prompt = `Extract emergency distress signal data from this audio. Response must be JSON.`;
+  static async transcribeAudio(base64Audio: string): Promise<string | null> {
+    const prompt = `Transcribe the spoken words in this audio clip exactly. Return only the transcription as plain text, nothing else.`;
 
     try {
       const model = genAI.getGenerativeModel({ 
         model: 'models/gemini-2.0-flash',
-        generationConfig: {
-          responseMimeType: 'application/json',
-        }
       });
 
       const parts = [
@@ -96,10 +93,14 @@ export class AIService {
       ];
 
       const response = await model.generateContent(parts);
-      return JSON.parse(response.response.text());
-    } catch (e) {
-      console.error('Audio parsing failed:', e);
-      throw e;
+      return response.response.text();
+    } catch (e: any) {
+      if (e.status === 429) {
+        console.warn('⚠️ Gemini Quota hit during audio transcription (429). Returning null.');
+        return null;
+      }
+      console.error('Audio transcription failed:', e);
+      return null;
     }
   }
 

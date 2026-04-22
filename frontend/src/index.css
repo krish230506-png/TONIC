@@ -12,4 +12,41 @@ body {
   background-color: var(--color-dark-bg);
   color: #f3f4f6;
   font-family: 'Inter', system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* Premium Animations */
+@keyframes slideInRight {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.4s ease-out forwards;
+}
+
+/* Glassmorphism */
+.glass-header {
+  background: rgba(30, 30, 30, 0.8) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+.map-container .leaflet-container {
+  background: #121212 !important;
 }
