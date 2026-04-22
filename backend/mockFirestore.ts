@@ -52,10 +52,24 @@ class MockFirestore {
     ];
 
     const skillsPool = ['medical', 'food', 'water distribution', 'shelter', 'infrastructure', 'rescue'];
-    const languages = ['Hindi', 'English', 'Hinglish', 'Bengali', 'Tamil', 'Telugu', 'Kannada', 'Marathi', 'Gujarati'];
     const names = ['Aryan', 'Sanya', 'Ishaan', 'Ananya', 'Kabir', 'Zoya', 'Aditya', 'Mira', 'Rohan', 'Dia', 'Vihaan', 'Sara', 'Arjun', 'Kyra', 'Dev', 'Avni', 'Rishi', 'Tara', 'Karan', 'Isha'];
 
+    const getRegionalLanguages = (cityName: string): string[] => {
+      const c = cityName.toLowerCase();
+      if (['mumbai', 'pune', 'nagpur', 'aurangabad', 'nashik'].includes(c)) return ['Marathi', 'Hindi', 'English'];
+      if (['bangalore', 'mysore'].includes(c)) return ['Kannada', 'English'];
+      if (['hyderabad', 'vizag', 'visakhapatnam'].includes(c)) return ['Telugu', 'English'];
+      if (['chennai', 'coimbatore', 'madurai'].includes(c)) return ['Tamil', 'English'];
+      if (['kolkata', 'guwahati'].includes(c)) return ['Bengali', 'Assamese', 'English'];
+      if (['ahmedabad', 'surat'].includes(c)) return ['Gujarati', 'Hindi', 'English'];
+      if (['kochi'].includes(c)) return ['Malayalam', 'English'];
+      if (['bhubaneswar'].includes(c)) return ['Odia', 'Hindi', 'English'];
+      // Default North/Central (Hindi Belt)
+      return ['Hindi', 'Hinglish', 'English'];
+    };
+
     const createVolunteers = (city: { name: string, lat: number, lng: number }, count: number) => {
+      const cityLanguages = getRegionalLanguages(city.name);
       for (let i = 0; i < count; i++) {
         const id = crypto.randomUUID();
         // Add jitter (~5-10km)
@@ -65,7 +79,7 @@ class MockFirestore {
         const volunteer: VolunteerProfile = {
           id,
           name: `${names[i % names.length]} (${city.name})`,
-          preferredLanguage: languages[Math.floor(Math.random() * languages.length)],
+          preferredLanguage: cityLanguages[Math.floor(Math.random() * cityLanguages.length)],
           skills: [skillsPool[Math.floor(Math.random() * skillsPool.length)], skillsPool[Math.floor(Math.random() * skillsPool.length)]],
           locationCoords: { lat: city.lat + jitterLat, lng: city.lng + jitterLng },
           reliabilityRate: 0.6 + Math.random() * 0.4,
