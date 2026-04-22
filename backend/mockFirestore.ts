@@ -9,6 +9,75 @@ class MockFirestore {
   // Seed some dummy volunteers for the 5km raidus search
   constructor() {
     this.seedVolunteers();
+    this.seedNeeds();
+  }
+
+  private seedNeeds() {
+    const initialNeeds: NeedEntity[] = [
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Mumbai (Andheri)', lat: 19.1136, lng: 72.8697 },
+        crisisType: 'medical',
+        urgencyReasoning: 'Critical medical emergency reported near airport. Immediate ambulance needed.',
+        estimatedScale: 5,
+        reportCount: 1,
+        criticalityScore: 85,
+        status: 'OPEN',
+        reportedAt: Date.now() - 1000 * 60 * 30,
+        rawInputs: ['Accident on airport road, multiple injuries.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Chennai (T Nagar)', lat: 13.0405, lng: 80.2337 },
+        crisisType: 'water',
+        urgencyReasoning: 'Severe flooding in T Nagar market area. Water logging up to 3 feet.',
+        estimatedScale: 50,
+        reportCount: 1,
+        criticalityScore: 78,
+        status: 'OPEN',
+        reportedAt: Date.now() - 1000 * 60 * 60,
+        rawInputs: ['Market area totally flooded, need pumps.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Delhi (Chandni Chowk)', lat: 28.6506, lng: 77.2300 },
+        crisisType: 'food',
+        urgencyReasoning: 'Ration shortage in congested sectors. 20 families without food.',
+        estimatedScale: 20,
+        reportCount: 1,
+        criticalityScore: 65,
+        status: 'OPEN',
+        reportedAt: Date.now() - 1000 * 60 * 90,
+        rawInputs: ['Families are hungry, send food packets.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Kolkata (Park Street)', lat: 22.5477, lng: 88.3517 },
+        crisisType: 'infrastructure',
+        urgencyReasoning: 'Fire reported in old commercial building. Smoke visible from distance.',
+        estimatedScale: 15,
+        reportCount: 1,
+        criticalityScore: 90,
+        status: 'OPEN',
+        reportedAt: Date.now() - 1000 * 60 * 15,
+        rawInputs: ['Fire at Park Street building, fire brigade on way.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Hyderabad (Hitech City)', lat: 17.4435, lng: 78.3772 },
+        crisisType: 'water',
+        urgencyReasoning: 'Water pipeline burst. Massive leakage flooding the main road.',
+        estimatedScale: 100,
+        reportCount: 1,
+        criticalityScore: 55,
+        status: 'OPEN',
+        reportedAt: Date.now() - 1000 * 60 * 120,
+        rawInputs: ['Main pipeline broken, road is a river.']
+      }
+    ];
+
+    initialNeeds.forEach(need => this.needs.set(need.id, need));
+    console.log(`✅ Seeded ${initialNeeds.length} initial crisis reports.`);
   }
 
   private seedVolunteers() {

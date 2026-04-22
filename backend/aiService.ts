@@ -117,10 +117,9 @@ export class AIService {
 
   static async generateDispatchMessage(volunteer: VolunteerProfile, need: NeedEntity): Promise<string> {
     const prompt = `
-      Compose a short, personalized WhatsApp message to dispatch volunteer ${volunteer.name}. 
-      Crisis: ${need.crisisType} at ${need.location.name}. 
-      Language: ${volunteer.preferredLanguage}. 
-      Reference past contributions: ${volunteer.pastContributions.join(', ')}.
+      Compose a short WhatsApp message to dispatch volunteer ${volunteer.name}. 
+      Strictly format the output EXACTLY like this (translate to ${volunteer.preferredLanguage} if it's not English):
+      "Hi ${volunteer.name}, there's a ${need.crisisType} emergency near ${need.location.name}. Your ${volunteer.skills[0]} expertise is urgently needed."
     `;
 
     try {

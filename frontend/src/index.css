@@ -6,12 +6,32 @@
   --color-primary: #3b82f6; 
   --color-danger: #ef4444;
   --color-warning: #f59e0b;
+  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
 }
 
 body {
   background-color: var(--color-dark-bg);
   color: #f3f4f6;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+/* Typography Overrides */
+h1, h2, h3, h4, h5, h6, button, span, label, div {
+  font-family: inherit;
+}
+
+.mono {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace !important;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
@@ -49,4 +69,22 @@ body {
 
 .map-container .leaflet-container {
   background: #121212 !important;
+}
+
+@keyframes pulse-open {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-open {
+  animation: pulse-open 1.5s ease-in-out infinite;
+}
+
+@keyframes shrinkWidth {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+.animate-shrink-width {
+  animation: shrinkWidth linear forwards;
 }
