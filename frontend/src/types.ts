@@ -14,6 +14,7 @@ export interface NeedEntity {
   criticalityScore: number;
   status: 'OPEN' | 'CRITICAL_VELOCITY' | 'RESOLVED';
   reportedAt: number; // timestamp
+  resolvedAt?: number; // timestamp
   rawInputs: string[];
   embedding?: number[]; 
   originalLanguage?: string;
@@ -26,6 +27,7 @@ export interface VolunteerProfile {
   skills: string[];
   locationCoords: LocationCoords;
   reliabilityRate: number; 
+  status: 'AVAILABLE' | 'BUSY' | 'OFF_DUTY';
   hoursLast30Days: number;
   lastDispatchedAt?: number;
   pastContributions: string[];

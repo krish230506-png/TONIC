@@ -13,66 +13,106 @@ class MockFirestore {
   }
 
   private seedNeeds() {
+    const now = Date.now();
     const initialNeeds: NeedEntity[] = [
       {
         id: crypto.randomUUID(),
         location: { name: 'Mumbai (Andheri)', lat: 19.1136, lng: 72.8697 },
         crisisType: 'medical',
-        urgencyReasoning: 'Critical medical emergency reported near airport. Immediate ambulance needed.',
+        urgencyReasoning: 'Emergency medical ping near International Airport. Multi-vehicle incident.',
         estimatedScale: 5,
-        reportCount: 1,
-        criticalityScore: 85,
+        reportCount: 4,
+        criticalityScore: 92,
         status: 'OPEN',
-        reportedAt: Date.now() - 1000 * 60 * 30,
-        rawInputs: ['Accident on airport road, multiple injuries.']
+        reportedAt: now - 1000 * 60 * 12, // 12m ago
+        rawInputs: ['Highway accident, need ambulances.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Delhi (Chandni Chowk)', lat: 28.6506, lng: 77.2300 },
+        crisisType: 'infrastructure',
+        urgencyReasoning: 'Fire signal in old commercial block. Risk of rapid spread.',
+        estimatedScale: 30,
+        reportCount: 12,
+        criticalityScore: 95,
+        status: 'OPEN',
+        reportedAt: now - 1000 * 60 * 35, // 35m ago
+        rawInputs: ['Major fire breaking out in narrow lanes.']
       },
       {
         id: crypto.randomUUID(),
         location: { name: 'Chennai (T Nagar)', lat: 13.0405, lng: 80.2337 },
         crisisType: 'water',
-        urgencyReasoning: 'Severe flooding in T Nagar market area. Water logging up to 3 feet.',
-        estimatedScale: 50,
-        reportCount: 1,
-        criticalityScore: 78,
+        urgencyReasoning: 'Deep waterlogging. Residential ground floors submerged.',
+        estimatedScale: 150,
+        reportCount: 45,
+        criticalityScore: 88,
         status: 'OPEN',
-        reportedAt: Date.now() - 1000 * 60 * 60,
-        rawInputs: ['Market area totally flooded, need pumps.']
+        reportedAt: now - 1000 * 60 * 75, // 1h 15m ago
+        rawInputs: ['Water entering houses, elderly people stuck.']
       },
       {
         id: crypto.randomUUID(),
-        location: { name: 'Delhi (Chandni Chowk)', lat: 28.6506, lng: 77.2300 },
-        crisisType: 'food',
-        urgencyReasoning: 'Ration shortage in congested sectors. 20 families without food.',
-        estimatedScale: 20,
-        reportCount: 1,
-        criticalityScore: 65,
-        status: 'OPEN',
-        reportedAt: Date.now() - 1000 * 60 * 90,
-        rawInputs: ['Families are hungry, send food packets.']
-      },
-      {
-        id: crypto.randomUUID(),
-        location: { name: 'Kolkata (Park Street)', lat: 22.5477, lng: 88.3517 },
+        location: { name: 'Kolkata (Park Street)', lat: 22.5487, lng: 88.3522 },
         crisisType: 'infrastructure',
-        urgencyReasoning: 'Fire reported in old commercial building. Smoke visible from distance.',
-        estimatedScale: 15,
-        reportCount: 1,
-        criticalityScore: 90,
-        status: 'OPEN',
-        reportedAt: Date.now() - 1000 * 60 * 15,
-        rawInputs: ['Fire at Park Street building, fire brigade on way.']
+        urgencyReasoning: 'Structural crack detected in flyover pillar. Traffic priority: HIGH.',
+        estimatedScale: 0,
+        reportCount: 3,
+        criticalityScore: 68,
+        status: 'RESOLVED',
+        reportedAt: now - 1000 * 60 * 180, // 3h ago
+        resolvedAt: now - 1000 * 60 * 45, // Resolved 45m ago (took 135m)
+        rawInputs: ['Flyover support looks unstable.']
       },
       {
         id: crypto.randomUUID(),
-        location: { name: 'Hyderabad (Hitech City)', lat: 17.4435, lng: 78.3772 },
+        location: { name: 'Hyderabad (Hitech City)', lat: 17.4483, lng: 78.3915 },
+        crisisType: 'medical',
+        urgencyReasoning: 'Heatstroke cluster reported at construction site. ~15 individuals affected.',
+        estimatedScale: 15,
+        reportCount: 2,
+        criticalityScore: 72,
+        status: 'RESOLVED',
+        reportedAt: now - 1000 * 60 * 240, // 4h ago
+        resolvedAt: now - 1000 * 60 * 120, // Resolved 2h ago (took 120m)
+        rawInputs: ['Labourers fainting due to heat.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Jaipur (Amber Road)', lat: 26.9855, lng: 75.8513 },
         crisisType: 'water',
-        urgencyReasoning: 'Water pipeline burst. Massive leakage flooding the main road.',
-        estimatedScale: 100,
-        reportCount: 1,
-        criticalityScore: 55,
+        urgencyReasoning: 'Main supply pipe burst. Severe water wastage and road collapse risk.',
+        estimatedScale: 500,
+        reportCount: 8,
+        criticalityScore: 61,
         status: 'OPEN',
-        reportedAt: Date.now() - 1000 * 60 * 120,
-        rawInputs: ['Main pipeline broken, road is a river.']
+        reportedAt: now - 1000 * 60 * 180, // 3h ago
+        rawInputs: ['Pipeline exploded, road is eroding.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Bangalore (Indiranagar)', lat: 12.9784, lng: 77.6408 },
+        crisisType: 'food',
+        urgencyReasoning: 'Ration distribution mismatch for displaced families. Immediate food needed.',
+        estimatedScale: 80,
+        reportCount: 1,
+        criticalityScore: 56,
+        status: 'RESOLVED',
+        reportedAt: now - 1000 * 60 * 300, // 5h ago
+        resolvedAt: now - 1000 * 60 * 210, // Resolved 3.5h ago (took 90m)
+        rawInputs: ['Displaced families haven’t eaten in 10 hours.']
+      },
+      {
+        id: crypto.randomUUID(),
+        location: { name: 'Lucknow (Gomti Nagar)', lat: 26.8496, lng: 80.9992 },
+        crisisType: 'infrastructure',
+        urgencyReasoning: 'Overhanging high-tension wire across pedestrian crossing.',
+        estimatedScale: 10,
+        reportCount: 1,
+        criticalityScore: 79,
+        status: 'OPEN',
+        reportedAt: now - 1000 * 60 * 25, // 25m ago
+        rawInputs: ['Live wire hanging dangerously low.']
       }
     ];
 
@@ -151,6 +191,7 @@ class MockFirestore {
           preferredLanguage: cityLanguages[Math.floor(Math.random() * cityLanguages.length)],
           skills: [skillsPool[Math.floor(Math.random() * skillsPool.length)], skillsPool[Math.floor(Math.random() * skillsPool.length)]],
           locationCoords: { lat: city.lat + jitterLat, lng: city.lng + jitterLng },
+          status: Math.random() > 0.3 ? 'AVAILABLE' : (Math.random() > 0.5 ? 'BUSY' : 'OFF_DUTY'),
           reliabilityRate: 0.6 + Math.random() * 0.4,
           hoursLast30Days: Math.floor(Math.random() * 25),
           pastContributions: [`Helped during crisis in ${city.name} area.`]
@@ -195,6 +236,13 @@ class MockFirestore {
   }
 
   // --- Requirements for Volunteers ---
+  async resolveNeed(id: string): Promise<void> {
+    const existing = this.needs.get(id);
+    if (existing) {
+      this.needs.set(id, { ...existing, status: 'RESOLVED', resolvedAt: Date.now() });
+    }
+  }
+
   async getVolunteers(): Promise<VolunteerProfile[]> {
     return Array.from(this.volunteers.values());
   }

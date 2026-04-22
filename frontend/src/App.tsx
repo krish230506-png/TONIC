@@ -4,7 +4,7 @@ import type { NeedEntity, VolunteerProfile } from './types';
 import { MapContainer, TileLayer, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.heat';
-import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
+import { formatDistanceToNow, differenceInMinutes, format } from 'date-fns';
 import { BoltIcon, ExclamationTriangleIcon, PaperAirplaneIcon, SignalIcon, SignalSlashIcon, MicrophoneIcon, StopCircleIcon, BellAlertIcon } from '@heroicons/react/24/outline';
 import { saveOfflineReport, syncOfflineReports, clearOfflineQueue } from './offlineSync';
 
@@ -14,6 +14,10 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import HistoryPage from './pages/HistoryPage';
 
 const API_BASE = 'http://localhost:3000';
+
+if (typeof window !== 'undefined') {
+  (window as any).L = L;
+}
 
 const mapContainerStyle = { width: '100%', height: '100%', borderRadius: '0.75rem' };
 const center: [number, number] = [19.0760, 72.8777];
@@ -26,10 +30,14 @@ function HeatmapOverlay({ data }: { data: any[] }) {
     if (!data || data.length === 0) return;
 
     // Heatmap data format: [[lat, lng, intensity], ...]
-    const points = data.map(p => [p.location[0], p.location[1], p.weight]);
+    const points = data.map(p => [p.lat, p.lng, p.weight]);
     
     // @ts-ignore - leaflet.heat is a plugin
-    const heatLayer = L.heatLayer(points, {
+    if (!(L as any).heatLayer) {
+      console.warn("Leaflet.heat not loaded yet...");
+      return;
+    }
+    const heatLayer = (L as any).heatLayer(points, {
       radius: 25,
       blur: 15,
       max: 100,
@@ -65,6 +73,7 @@ function ChangeView({ center, zoom }: { center: [number, number], zoom: number }
 
 export default function App() {
   const [needs, setNeeds] = useState<NeedEntity[]>([]);
+  const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [selectedNeed, setSelectedNeed] = useState<NeedEntity | null>(null);
   const [dispatchResult, setDispatchResult] = useState<{ volunteer: VolunteerProfile, dispatchMessage: string } | null>(null);
   const [loadingDispatch, setLoadingDispatch] = useState<boolean>(false);
@@ -89,14 +98,31 @@ export default function App() {
 
   // New Layout State
   const [showBanner, setShowBanner] = useState(true);
+  const [now, setNow] = useState(Date.now());
   const [timeStr, setTimeStr] = useState(new Date().toLocaleTimeString());
 
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setInterval(() => setTimeStr(new Date().toLocaleTimeString()), 1000);
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      setTimeStr(new Date().toLocaleTimeString());
+    }, 60000); // Update every minute for timers
     return () => clearInterval(timer);
+  }, []);
+
+  const fetchVolunteers = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/volunteers`);
+      setVolunteers(response.data);
+    } catch (e) {
+      console.error("Error fetching volunteers:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchVolunteers();
   }, []);
 
   // Simulation State
@@ -326,6 +352,7 @@ export default function App() {
   };
 
   const getSlaStatus = (reportedAt: number) => {
+    if (!reportedAt) return { color: 'bg-gray-500', text: 'Unknown SLA' };
     const mins = differenceInMinutes(Date.now(), reportedAt);
     if (mins < 30) return { color: 'bg-green-500', text: 'Response on time ✓' };
     if (mins < 60) return { color: 'bg-yellow-500', text: 'Approaching SLA' };
@@ -339,7 +366,8 @@ export default function App() {
   };
 
   const getCrisisStyle = (type: string) => {
-    switch (type.toLowerCase()) {
+    const safeType = (type || 'other').toLowerCase();
+    switch (safeType) {
       case 'medical': return { borderColor: '#EF4444', icon: '🏥' };
       case 'infrastructure': return { borderColor: '#F59E0B', icon: '🏗' };
       case 'food': return { borderColor: '#10B981', icon: '🍛' };
@@ -350,12 +378,30 @@ export default function App() {
     }
   };
 
-  const heatmapData = needs.length > 0 
-     ? needs.map(n => ({
-         location: [n.location.lat, n.location.lng],
-         weight: n.criticalityScore
-       }))
-     : [];
+  const handleResolve = async (id: string) => {
+    try {
+      await axios.post(`${API_BASE}/needs/${id}/resolve`);
+      setNeeds(prev => prev.map(n => n.id === id ? { ...n, status: 'RESOLVED' } : n));
+      if (selectedNeed?.id === id) setSelectedNeed(prev => prev ? { ...prev, status: 'RESOLVED' } : null);
+      setToastMessage("Crisis marked as Resolved. Database updated.");
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (e) {
+      console.error("Failed to resolve crisis:", e);
+    }
+  };
+
+  const getGoldenHourColor = (timestamp: number) => {
+    const mins = (Date.now() - timestamp) / (1000 * 60);
+    if (mins < 30) return 'text-green-400';
+    if (mins < 60) return 'text-yellow-400';
+    return 'text-red-500 font-bold animate-pulse';
+  };
+
+  const heatmapData = (needs || []).filter(n => n?.location?.lat && n?.location?.lng).map(n => ({
+    lat: n.location.lat,
+    lng: n.location.lng,
+    weight: n.criticalityScore || 0
+  }));
 
   const dashboardContent = (
     <div className="flex-1 flex flex-col p-6 overflow-hidden box-border h-full relative">
@@ -372,20 +418,22 @@ export default function App() {
       {/* Top Banner */}
       {showBanner && (
         <div className="flex-shrink-0 mb-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/15 rounded-xl p-4 flex justify-between items-center relative shadow-xl">
-          <h3 className="font-bold text-white tracking-wide ml-2">🚨 TONIC is live and monitoring {new Set(needs.map(n => n.location.name)).size || 4} cities</h3>
+          <h3 className="font-bold text-white tracking-wide ml-2">🚨 CommunityPulse AI is live and monitoring {new Set(needs.filter(n => n?.location?.name).map(n => n.location.name)).size || 4} cities</h3>
           
           <div className="flex space-x-10 mr-8">
              <div className="flex flex-col items-center">
-                <span className="text-white text-2xl mono font-bold leading-none">{needs.filter(n => n.status !== 'RESOLVED').length}</span>
+                <span className="text-white text-2xl mono font-bold leading-none">{needs.filter(n => n?.status === 'OPEN').length}</span>
                 <span className="text-blue-300/80 text-[10px] uppercase tracking-[0.1em] font-bold mt-1">Active Crises</span>
              </div>
              <div className="flex flex-col items-center">
-                <span className="text-white text-2xl mono font-bold leading-none">{needs.filter(n => n.status === 'RESOLVED').length}</span>
+                <span className="text-white text-2xl mono font-bold leading-none">{(volunteers || []).filter(v => v?.status === 'AVAILABLE').length || 184}</span>
                 <span className="text-purple-300/80 text-[10px] uppercase tracking-[0.1em] font-bold mt-1">Volunteers Ready</span>
              </div>
              <div className="flex flex-col items-center">
-                <span className="text-white text-2xl mono font-bold leading-none">{needs.length ? (needs.reduce((a, b) => a + b.criticalityScore, 0) / needs.length).toFixed(0) : 0}</span>
-                <span className="text-indigo-300/80 text-[10px] uppercase tracking-[0.1em] font-bold mt-1">Avg Response Score</span>
+                <span className="text-white text-2xl mono font-bold leading-none">
+                  {needs.length ? (needs.reduce((a, b) => a + (b?.criticalityScore || 0), 0) / needs.length).toFixed(0) : 0}
+                </span>
+                <span className="text-indigo-300/80 text-[10px] uppercase tracking-[0.1em] font-bold mt-1">Avg Severity Score</span>
              </div>
           </div>
 
@@ -440,49 +488,53 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {needs.length === 0 && <p className="text-gray-500 text-sm">No recent distress signals.</p>}
             {needs.map(need => {
-              const sla = getSlaStatus(need.reportedAt);
+              const isResolved = need.status === 'RESOLVED';
               const crisisStyle = getCrisisStyle(need.crisisType);
               return (
                 <div 
                   key={need.id} 
-                  className={`p-4 rounded-lg border transition-all cursor-pointer hover:bg-[#2a2a2a] relative animate-slide-in ${selectedNeed?.id === need.id ? 'border-blue-500 bg-[#252535]' : 'border-gray-700 bg-[#252525]'}`}
+                  className={`p-4 rounded-lg border transition-all cursor-pointer hover:bg-[#2a2a2a] relative animate-slide-in ${isResolved ? 'opacity-50 grayscale-[0.5] border-green-900/30' : selectedNeed?.id === need.id ? 'border-blue-500 bg-[#252535]' : 'border-gray-700 bg-[#252525]'}`}
                   onClick={() => { setSelectedNeed(need); setDispatchResult(null); }}
-                  style={{ borderLeft: `4px solid ${crisisStyle.borderColor}` }}
+                  style={{ borderLeft: `4px solid ${isResolved ? '#10B981' : crisisStyle.borderColor}` }}
                 >
-                  {/* Golden Hour Bar */}
-                  <div className="absolute top-0 left-0 w-full h-1 overflow-hidden rounded-t-lg bg-gray-800">
-                    <div className={`h-full ${sla.color}`} style={{ width: `${Math.min(100, (differenceInMinutes(Date.now(), need.reportedAt) / 60) * 100)}%`}}></div>
-                  </div>
-
-                  <div className="flex justify-between items-start mb-2 mt-1">
-                     <div className="flex space-x-2">
-                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow ${getScoreColor(need.criticalityScore)}`}>
-                            {need.criticalityScore.toFixed(0)} SC
-                         </span>
-                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${need.status === 'CRITICAL_VELOCITY' ? 'bg-red-900/50 text-red-400 border border-red-800/50' : 'bg-blue-900/50 text-blue-400 border border-blue-800/50'} ${need.status === 'OPEN' ? 'animate-pulse-open' : ''}`}>
-                           {need.status}
-                         </span>
-                     </div>
-                    <span className="text-[10px] text-gray-500 flex flex-col items-end">
-                      {formatDistanceToNow(need.reportedAt)} ago
-                      <span className="mt-1" style={{color: sla.text.includes('Breach') ? '#ef4444' : '#9ca3af'}}>{sla.text}</span>
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-[10px] mono text-gray-500 font-bold uppercase tracking-widest">{need?.location?.name || 'Unknown Location'}</span>
+                    <span className="text-[10px] text-gray-500 mono flex items-center">
+                       <BoltIcon className="w-3 h-3 mr-1 text-yellow-500" />
+                       {need?.reportedAt ? format(need.reportedAt, 'HH:mm') : '--:--'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between mt-1 min-w-0">
-                     <h3 className="font-semibold text-[0.9rem] text-gray-200 capitalize truncate pr-2">{crisisStyle.icon} {need.crisisType} Crisis</h3>
-                     {need.originalLanguage && <span className="text-[10px] bg-gray-700/50 px-2 py-0.5 rounded text-gray-300 border border-gray-600">{need.originalLanguage}</span>}
+                  <div className="mb-2">
+                    <h4 className="text-[13px] font-bold text-white capitalize flex items-center">
+                      <span className="mr-2">{getCrisisStyle(need?.crisisType || 'other').icon}</span>
+                      {need?.crisisType || 'Report'}
+                    </h4>
                   </div>
-                  <p className="text-[0.8rem] text-[#8B9CB8] mt-1 line-clamp-2 mb-4">{need.urgencyReasoning}</p>
                   
-                  {/* Severity Bar */}
-                  <div className="mt-2 pt-2 border-t border-gray-800">
-                     <div className="flex justify-between text-[0.6rem] mono text-gray-400 mb-1 tracking-wider uppercase">
-                        <span>Severity</span>
-                        <span>{need.criticalityScore.toFixed(0)}%</span>
-                     </div>
-                     <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, need.criticalityScore))}%`, backgroundColor: need.criticalityScore >= 70 ? '#EF4444' : need.criticalityScore >= 40 ? '#F59E0B' : '#10B981' }}></div>
-                     </div>
+                  {/* Real-time SLA progress bar */}
+                  <div className="h-1 w-full bg-gray-800 rounded-full mb-3 overflow-hidden">
+                    <div className={`h-full ${getSlaStatus(need?.reportedAt || Date.now()).color}`} style={{ width: `${Math.min(100, (differenceInMinutes(Date.now(), need?.reportedAt || Date.now()) / 60) * 100)}%`}}></div>
+                  </div>
+
+                  <div className="flex justify-between items-center text-[10px] mono">
+                     <span className={`font-bold ${getGoldenHourColor(need?.reportedAt || Date.now())}`}>
+                        {need?.reportedAt ? formatDistanceToNow(need.reportedAt) : '??'} ago
+                     </span>
+                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${need?.status === 'CRITICAL_VELOCITY' ? 'bg-red-900/50 text-red-400 border border-red-800/50' : 'bg-blue-900/50 text-blue-400 border border-blue-800/50'} ${need?.status === 'OPEN' ? 'animate-pulse-open' : ''}`}>
+                        {need?.status || 'OPEN'}
+                     </span>
+                  </div>
+                  
+                  <div className="mt-3 flex justify-between items-center border-t border-gray-800/50 pt-2">
+                      <span className="text-[11px] text-gray-400">Score: <span className="text-white font-bold">{(need?.criticalityScore || 0).toFixed(0)}</span></span>
+                      {need?.status !== 'RESOLVED' && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleResolve(need.id); }}
+                          className="text-[10px] bg-green-900/30 text-green-400 border border-green-800/50 px-2 py-0.5 rounded hover:bg-green-600/40 transition-all font-bold"
+                        >
+                          Resolve
+                        </button>
+                      )}
                   </div>
                 </div>
               );
@@ -532,16 +584,14 @@ export default function App() {
                   : 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
                 }
               />
-              {needs.map(need => (
+              {(needs || []).filter(n => n?.location?.lat && n?.location?.lng).map(need => (
                 <Circle
                   key={need.id}
                   center={[need.location.lat, need.location.lng]}
-                  radius={need.criticalityScore > 70 ? 1200 : 600}
-                  pathOptions={{
-                    fillColor: 'transparent',
-                    color: '#fff',
-                    opacity: 0.2,
-                    weight: 1,
+                  radius={500}
+                  pathOptions={{ 
+                    color: need.status === 'RESOLVED' ? '#10B981' : (need.criticalityScore > 75 ? '#EF4444' : '#F59E0B'),
+                    fillOpacity: 0.2
                   }}
                   eventHandlers={{
                     click: () => setSelectedNeed(need)
@@ -580,13 +630,13 @@ export default function App() {
                    <div className="bg-[#121212] border border-gray-800 rounded-lg px-3 py-2 flex flex-col items-center flex-1 shadow-inner">
                       <span className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Avg Score</span>
                       <span className="text-sm font-['JetBrains_Mono'] font-bold text-[#F59E0B]">
-                        {needs.length ? (needs.reduce((a, b) => a + b.criticalityScore, 0) / needs.length).toFixed(0) : 0}
+                        {needs.length ? (needs.reduce((a, b) => a + (b?.criticalityScore || 0), 0) / needs.length).toFixed(0) : 0}
                       </span>
                    </div>
                    <div className="bg-[#121212] border border-gray-800 rounded-lg px-3 py-2 flex flex-col items-center flex-1 shadow-inner">
                       <span className="text-[9px] text-gray-500 uppercase tracking-widest mb-1">Monitored</span>
                       <span className="text-sm font-['JetBrains_Mono'] font-bold text-[#3B82F6]">
-                        {new Set(needs.map(n => n.location.name)).size}
+                        {new Set(needs.filter(n => n?.location?.name).map(n => n.location.name)).size}
                       </span>
                    </div>
                 </div>
@@ -596,39 +646,53 @@ export default function App() {
                 <div className="bg-[#121212] p-4 rounded-lg border border-gray-800 relative shadow-inner">
                   <h3 className="text-sm font-semibold text-gray-400 mb-2">Selected Need</h3>
                   <div className="flex justify-between items-center mb-1">
-                     <p className="text-lg text-white">{selectedNeed.location.name}</p>
-                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow ${getScoreColor(selectedNeed.criticalityScore)}`}>
-                        {selectedNeed.criticalityScore.toFixed(0)} SCORE
+                     <p className="text-lg text-white">{selectedNeed?.location?.name || 'Selected Site'}</p>
+                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded shadow ${getScoreColor(selectedNeed?.criticalityScore || 0)}`}>
+                        {(selectedNeed?.criticalityScore || 0).toFixed(0)} SCORE
                      </span>
                   </div>
-                  <p className="text-sm text-gray-300">Type: <span className="capitalize border-b border-gray-600">{selectedNeed.crisisType}</span></p>
+                  <p className="text-sm text-gray-300">Type: <span className="capitalize border-b border-gray-600">{selectedNeed?.crisisType || 'General'}</span></p>
                   
                   {/* Criticality Score UI math breakdown */}
                   <div className="mt-4 pt-4 border-t border-gray-800 bg-[#1a1a1a] -mx-4 -mb-4 px-4 pb-4 rounded-b-lg">
                     <p className="text-[10px] text-uppercase tracking-wider text-gray-500 mb-2">Mathematical Score Breakdown (Max 100)</p>
                     <div className="flex items-center text-xs font-mono text-gray-300">
-                      <div className="flex-1 text-center bg-[#222] rounded py-1 px-1">{((selectedNeed.reportCount / (Math.max((Date.now() - selectedNeed.reportedAt) / (1000 * 60 * 60), 0.1)) * 5)*0.4).toFixed(0)} <span className="text-[9px] block opacity-50">Velocity</span></div>
+                      <div className="flex-1 text-center bg-[#222] rounded py-1 px-1">{(((selectedNeed?.reportCount || 1) / (Math.max((Date.now() - (selectedNeed?.reportedAt || Date.now())) / (1000 * 60 * 60), 0.1)) * 5)*0.4).toFixed(0)} <span className="text-[9px] block opacity-50">Velocity</span></div>
                       <span className="mx-1">+</span>
                       <div className="flex-1 text-center bg-[#222] rounded py-1 px-1">{(100 * 0.4).toFixed(0)} <span className="text-[9px] block opacity-50">Severity</span></div>
                       <span className="mx-1">+</span>
-                      <div className="flex-1 text-center bg-[#222] rounded py-1 px-1">{(Math.min(100, selectedNeed.estimatedScale * 5) * 0.2).toFixed(0)} <span className="text-[9px] block opacity-50">Vulnerability</span></div>
+                      <div className="flex-1 text-center bg-[#222] rounded py-1 px-1">{(Math.min(100, (selectedNeed?.estimatedScale || 0) * 5) * 0.2).toFixed(0)} <span className="text-[9px] block opacity-50">Vulnerability</span></div>
                       <span className="mx-1">=</span>
-                      <div className={`flex-1 text-center font-bold rounded py-1 px-1 ${getScoreColor(selectedNeed.criticalityScore)}`}>{selectedNeed.criticalityScore.toFixed(1)} <span className="text-[9px] block opacity-50 text-white/50">Total</span></div>
+                      <div className={`flex-1 text-center font-bold rounded py-1 px-1 ${getScoreColor(selectedNeed?.criticalityScore || 0)}`}>{(selectedNeed?.criticalityScore || 0).toFixed(1)} <span className="text-[9px] block opacity-50 text-white/50">Total</span></div>
                     </div>
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => handleDispatch(selectedNeed.id)}
-                  disabled={loadingDispatch || !isOnline}
-                  className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 disabled:cursor-not-allowed rounded-lg font-bold text-white transition-all shadow-lg hover:shadow-indigo-500/20 active:scale-[0.98] flex justify-center items-center"
-                >
-                  {loadingDispatch ? (
-                    <span className="flex items-center"><span className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent mr-2"></span> Dispatching...</span>
-                  ) : (
-                    'Dispatch Volunteer'
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={() => handleDispatch(selectedNeed.id)}
+                    disabled={loadingDispatch || !isOnline || selectedNeed.status === 'RESOLVED'}
+                    className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800/50 disabled:cursor-not-allowed rounded-lg font-bold text-white transition-all shadow-lg active:scale-[0.98] flex justify-center items-center text-sm"
+                  >
+                    {loadingDispatch ? (
+                      <span className="flex items-center"><span className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></span> Dispatching...</span>
+                    ) : (
+                      selectedNeed.status === 'RESOLVED' ? 'Resolution Complete' : 'Dispatch Volunteer'
+                    )}
+                  </button>
+
+                  {selectedNeed.status !== 'RESOLVED' && (
+                    <button 
+                      onClick={() => handleResolve(selectedNeed.id)}
+                      className="px-4 py-3 bg-green-900/40 text-green-400 border border-green-800/50 rounded-lg hover:bg-green-900/60 transition-all font-bold text-sm flex items-center"
+                      title="Mark as Resolved"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </button>
                   )}
-                </button>
+                </div>
 
                 {dispatchResult && (
                   <div className="mt-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">

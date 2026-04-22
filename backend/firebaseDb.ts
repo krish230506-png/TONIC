@@ -101,6 +101,16 @@ class FirebaseDb {
     }
   }
 
+  async resolveNeed(id: string): Promise<void> {
+    if (useMock || !firestore) return mockDb.resolveNeed(id);
+    try {
+      await firestore.collection('needs').doc(id).update({ status: 'RESOLVED' });
+    } catch (e) {
+      useMock = true;
+      return mockDb.resolveNeed(id);
+    }
+  }
+
   // --- Volunteers ---
   async getVolunteers(): Promise<VolunteerProfile[]> {
     if (useMock || !firestore) return mockDb.getVolunteers();
@@ -130,6 +140,7 @@ class FirebaseDb {
       preferredLanguage: 'Hindi',
       skills: ['medical', 'water distribution'],
       locationCoords: { lat: 19.0760, lng: 72.8777 }, 
+      status: 'AVAILABLE',
       reliabilityRate: 0.9,
       hoursLast30Days: 10,
       pastContributions: ['water distribution in Dharavi last month']
@@ -140,6 +151,7 @@ class FirebaseDb {
       preferredLanguage: 'English',
       skills: ['food', 'shelter'],
       locationCoords: { lat: 19.0800, lng: 72.8800 },
+      status: 'BUSY',
       reliabilityRate: 0.7,
       hoursLast30Days: 25, 
       pastContributions: ['food packet sorting']
@@ -150,6 +162,7 @@ class FirebaseDb {
       preferredLanguage: 'Hinglish',
       skills: ['infrastructure', 'rescue'],
       locationCoords: { lat: 19.0650, lng: 72.8700 }, 
+      status: 'AVAILABLE',
       reliabilityRate: 0.85,
       hoursLast30Days: 5,
       pastContributions: ['clearing debris in Andheri']

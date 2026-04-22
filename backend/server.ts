@@ -151,6 +151,16 @@ function smartLocalExtract(text: string): Partial<any> {
   };
 }
 
+app.post('/needs/:id/resolve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.resolveNeed(id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to resolve need' });
+  }
+});
+
 // Basic endpoints to fetch data for the frontend
 app.get('/needs', async (req, res) => {
   const needs = await db.getAllNeeds();
