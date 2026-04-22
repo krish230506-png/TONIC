@@ -69,6 +69,30 @@ function smartLocalExtract(text: string): Partial<any> {
     'karol bagh': { lat: 28.6550, lng: 77.1888 },
     'delhi': { lat: 28.6139, lng: 77.2090 },
     'new delhi': { lat: 28.6139, lng: 77.2090 },
+    // Major Indian Cities
+    'bangalore': { lat: 12.9716, lng: 77.5946 },
+    'bengaluru': { lat: 12.9716, lng: 77.5946 },
+    'hyderabad': { lat: 17.3850, lng: 78.4867 },
+    'chennai': { lat: 13.0827, lng: 80.2707 },
+    'kolkata': { lat: 22.5726, lng: 88.3639 },
+    'pune': { lat: 18.5204, lng: 73.8567 },
+    'ahmedabad': { lat: 23.0225, lng: 72.5714 },
+    'jaipur': { lat: 26.9124, lng: 75.7873 },
+    'lucknow': { lat: 26.8467, lng: 80.9462 },
+    'kanpur': { lat: 26.4499, lng: 80.3319 },
+    'nagpur': { lat: 21.1458, lng: 79.0882 },
+    'indore': { lat: 22.7196, lng: 75.8577 },
+    'patna': { lat: 25.5941, lng: 85.1376 },
+    'bhopal': { lat: 23.2599, lng: 77.4126 },
+    'surat': { lat: 21.1702, lng: 72.8311 },
+    'vizag': { lat: 17.6868, lng: 83.2185 },
+    'visakhapatnam': { lat: 17.6868, lng: 83.2185 },
+    'noida': { lat: 28.5355, lng: 77.3910 },
+    'gurgaon': { lat: 28.4595, lng: 77.0266 },
+    'gurugram': { lat: 28.4595, lng: 77.0266 },
+    'chandigarh': { lat: 30.7333, lng: 76.7794 },
+    'kochi': { lat: 9.9312, lng: 76.2673 },
+    'india': { lat: 20.5937, lng: 78.9629 }, // Center of India
   };
 
   let locationName = 'Mumbai Metropolitan Area';
