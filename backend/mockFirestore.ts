@@ -37,6 +37,18 @@ class MockFirestore {
       { name: 'Gurgaon', lat: 28.4595, lng: 77.0266 },
       { name: 'Chandigarh', lat: 30.7333, lng: 76.7794 },
       { name: 'Kochi', lat: 9.9312, lng: 76.2673 },
+      { name: 'Rohtak', lat: 28.8955, lng: 76.6066 },
+      { name: 'Panipat', lat: 29.3909, lng: 76.9635 },
+      { name: 'Sonipat', lat: 28.9931, lng: 77.0151 },
+      { name: 'Amritsar', lat: 31.6340, lng: 74.8723 },
+      { name: 'Ludhiana', lat: 30.9010, lng: 75.8573 },
+      { name: 'Varanasi', lat: 25.3176, lng: 82.9739 },
+      { name: 'Agra', lat: 27.1767, lng: 78.0081 },
+      { name: 'Ranchi', lat: 23.3441, lng: 85.3096 },
+      { name: 'Bhubaneswar', lat: 20.2961, lng: 85.8245 },
+      { name: 'Guwahati', lat: 26.1158, lng: 91.7086 },
+      { name: 'Dehradun', lat: 30.3165, lng: 78.0322 },
+      { name: 'Shimla', lat: 31.1048, lng: 77.1734 },
     ];
 
     const skillsPool = ['medical', 'food', 'water distribution', 'shelter', 'infrastructure', 'rescue'];
