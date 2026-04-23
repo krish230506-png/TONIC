@@ -131,4 +131,52 @@ export class AIService {
       return `Emergency: ${need.crisisType} at ${need.location.name}. Urgent help needed!`;
     }
   }
+
+  static async askAssistant(messages: any[], contextData: any): Promise<string> {
+    const userQuery = messages[messages.length - 1].content.toLowerCase();
+    
+    // 1. CLOUD INTELLIGENCE (Priority)
+    const modelsToTry = [
+      'gemini-2.0-flash', 
+      'models/gemini-2.0-flash', 
+      'gemini-1.5-flash',
+      'models/gemini-1.5-flash'
+    ];
+
+    for (const modelName of modelsToTry) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const prompt = `You are a crisis coordination AI. Context: ${JSON.stringify(contextData)}. User: ${messages[messages.length-1].content}`;
+        const response = await model.generateContent(prompt);
+        const text = response.response.text();
+        if (text) return text;
+      } catch (e: any) {
+        console.warn(`Cloud attempt (${modelName}) failed: ${e.message}`);
+        continue;
+      }
+    }
+
+    // 2. SAFETY NET (LHI Fallback)
+    const incidents = contextData.activeIncidents || [];
+    const volunteers = contextData.volunteers || [];
+    
+    if (userQuery.includes('volunteer')) {
+      const avail = volunteers.filter((v: any) => v.available).length;
+      return `Currently, there are ${avail} volunteers available for dispatch. Coordination focuses on cities like ${[...new Set(volunteers.slice(0,5).map((v:any)=>v.city))].join(', ')}.`;
+    }
+
+    if (userQuery.includes('urgent') || userQuery.includes('area') || userQuery.includes('help')) {
+      const top = incidents.sort((a:any, b:any) => b.score - a.score)[0];
+      return top 
+        ? `The most critical incident is in ${top.loc} (Severity: ${top.score}). It is categorized as a ${top.type} emergency requiring immediate attention.`
+        : "All clear. No active crises detected in the live data stream.";
+    }
+
+    if (userQuery.includes('summarize') || userQuery.includes('summary') || userQuery.includes('crises')) {
+      const types = [...new Set(incidents.map((i:any)=>i.type))];
+      return `[Local Summary] There are ${incidents.length} active incidents. Types involved: ${types.join(', ')}. Most critical locations: ${incidents.slice(0,3).map((i:any)=>i.loc).join(', ')}.`;
+    }
+
+    return "[Local Intelligence Fallback] My cloud brain is currently resting due to high traffic, but my local scanners show " + incidents.length + " active crises and " + volunteers.filter((v:any)=>v.available).length + " available volunteers. What specific metric can I look up for you in the database?";
+  }
 }

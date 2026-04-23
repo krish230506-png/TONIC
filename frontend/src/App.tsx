@@ -12,6 +12,7 @@ import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import VolunteersPage from './pages/VolunteersPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import HistoryPage from './pages/HistoryPage';
+import AiAssistantPage from './pages/AiAssistantPage';
 import VoiceAssistant from './components/VoiceAssistant';
 
 const API_BASE = 'http://localhost:3000';
@@ -730,6 +731,7 @@ export default function App() {
     if (location.pathname === '/') return 'Live Dashboard';
     if (location.pathname === '/volunteers') return 'Volunteers';
     if (location.pathname === '/analytics') return 'Analytics';
+    if (location.pathname === '/ai-assistant') return 'AI Assistant';
     if (location.pathname === '/history') return 'Crisis History';
     return '';
   };
@@ -738,6 +740,7 @@ export default function App() {
     { path: '/', label: 'Dashboard', icon: '⚡' },
     { path: '/volunteers', label: 'Volunteers', icon: '👥' },
     { path: '/analytics', label: 'Analytics', icon: '📊' },
+    { path: '/ai-assistant', label: 'AI Assistant', icon: '🤖' },
     { path: '/history', label: 'History', icon: '📋' },
   ];
 
@@ -843,6 +846,7 @@ export default function App() {
               <Route path="/" element={dashboardContent} />
               <Route path="/volunteers" element={<VolunteersPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/ai-assistant" element={<AiAssistantPage />} />
               <Route path="/history" element={<HistoryPage />} />
             </Routes>
          </div>
