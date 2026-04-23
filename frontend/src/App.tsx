@@ -12,6 +12,7 @@ import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import VolunteersPage from './pages/VolunteersPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import HistoryPage from './pages/HistoryPage';
+import VoiceAssistant from './components/VoiceAssistant';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -108,7 +109,7 @@ export default function App() {
     const timer = setInterval(() => {
       setNow(Date.now());
       setTimeStr(new Date().toLocaleTimeString());
-    }, 60000); // Update every minute for timers
+    }, 1000); // Update every second for live timers
     return () => clearInterval(timer);
   }, []);
 
@@ -127,6 +128,7 @@ export default function App() {
 
   // Simulation State
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [simCount, setSimCount] = useState(0);
   const simTimerRef = useRef<any>(null);
 
@@ -802,16 +804,28 @@ export default function App() {
          <div className="h-[56px] flex-shrink-0 bg-[#070B14] border-b border-white/[0.06] px-6 flex justify-between items-center z-50">
             <div className="flex items-center space-x-4">
               <h2 className="font-bold text-[1rem] text-white">{getPageTitle()}</h2>
-              {/* Added the simulate button back into the top bar! */}
-              {!isSimulating ? (
-                <button onClick={startSimulation} className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center shadow-lg h-7 ml-4">
-                  <BoltIcon className="w-3 h-3 mr-1" /> ⚡ Simulate Crisis
+              {/* Navigation Bar Action Panel */}
+              <div className="flex items-center gap-3 ml-4">
+                {/* Voice Assistant Navigation Trigger */}
+                <button 
+                  onClick={() => setIsVoiceOpen(true)}
+                  className="bg-gradient-to-r from-[#00bcd4]/10 to-[#1a237e]/30 hover:from-[#00bcd4]/30 hover:to-[#1a237e]/50 border border-[#00bcd4]/40 hover:shadow-[0_0_15px_rgba(0,188,212,0.4)] text-[#00bcd4] px-3 py-1 rounded-full text-[10px] font-bold transition-all duration-300 flex items-center h-7"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 mr-2 animate-pulse shadow-[0_0_5px_#4ade80]"></span>
+                  <MicrophoneIcon className="w-3 h-3 mr-1.5" /> Voice Reporter
                 </button>
-              ) : (
-                <button onClick={stopSimulation} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center animate-pulse h-7 ml-4">
-                  <StopCircleIcon className="w-3 h-3 mr-1" /> Stop Sim ({simCount}/5)
-                </button>
-              )}
+
+                {/* Simulate Crisis Trigger */}
+                {!isSimulating ? (
+                  <button onClick={startSimulation} className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center shadow-lg h-7">
+                    <BoltIcon className="w-3 h-3 mr-1" /> Simulate Crisis
+                  </button>
+                ) : (
+                  <button onClick={stopSimulation} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center animate-pulse h-7">
+                    <StopCircleIcon className="w-3 h-3 mr-1" /> Stop Sim ({simCount}/5)
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-center space-x-4">
                {isOnline ? (
@@ -869,6 +883,10 @@ export default function App() {
             ))}
          </div>
       </div>
+      
+      {/* AI Voice Assistant */}
+      <VoiceAssistant isOpen={isVoiceOpen} onClose={() => setIsVoiceOpen(false)} apiBase={API_BASE} />
+      
     </div>
   );
 }
