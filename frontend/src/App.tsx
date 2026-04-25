@@ -144,10 +144,11 @@ export default function App() {
 
   // UI State
   const [mapLayer, setMapLayer] = useState<'dark' | 'light' | 'satellite'>('light');
-  const [bgTheme, setBgTheme] = useState<'white' | 'black'>(() => {
-    return (localStorage.getItem('bgTheme') as 'white' | 'black') || 'black';
+  const [bgTheme, setBgTheme] = useState<'white' | 'black' | 'space'>(() => {
+    return (localStorage.getItem('bgTheme') as 'white' | 'black' | 'space') || 'black';
   });
-  const isDark = bgTheme === 'black';
+  const isDark = bgTheme !== 'white';
+  const isSpace = bgTheme === 'space';
 
   useEffect(() => {
     localStorage.setItem('bgTheme', bgTheme);
@@ -156,29 +157,35 @@ export default function App() {
 
   const theme = {
     // Backgrounds
-    bg: isDark ? 'bg-[#0f1117]' : 'bg-[#F0EEE8]',
-    surface: isDark ? 'bg-zinc-900/80 backdrop-blur-2xl' : 'bg-white',
-    surfaceSoft: isDark ? 'bg-zinc-800/50' : 'bg-[#EEEcE6]',
-    surfaceCard: isDark ? 'bg-zinc-900' : 'bg-white',
-    surfacePanel: isDark ? 'bg-zinc-900/50' : 'bg-[#EEEcE6]',
-    sidebar: 'bg-[#1a1a2e]', // Always dark
-    banner: 'bg-[#1a1a2e]', // Always dark
+    bg: isSpace ? 'nasa-bg' : (isDark ? 'bg-black' : 'bg-[#F0EEE8]'),
+
+    // CHANGED: Reduced from backdrop-blur-3xl to backdrop-blur-lg
+    surface: isSpace ? 'bg-black/40 backdrop-blur-lg' : (isDark ? 'bg-zinc-900/80 backdrop-blur-2xl' : 'bg-white'),
+    surfaceSoft: isSpace ? 'bg-white/10' : (isDark ? 'bg-zinc-800/50' : 'bg-[#EEEcE6]'),
+    surfaceCard: isSpace ? 'bg-black/60' : (isDark ? 'bg-zinc-900' : 'bg-white'),
+
+    // CHANGED: Reduced from backdrop-blur-xl to backdrop-blur-md
+    surfacePanel: isSpace ? 'bg-white/5 backdrop-blur-md' : (isDark ? 'bg-zinc-900/50' : 'bg-[#EEEcE6]'),
+
+    // CHANGED: Reduced from backdrop-blur-2xl to backdrop-blur-md
+    sidebar: isSpace ? 'bg-black/60 backdrop-blur-md' : (isDark ? 'bg-black' : 'bg-zinc-100'),
+    banner: isSpace ? 'bg-black/60 backdrop-blur-md' : (isDark ? 'bg-zinc-950' : 'bg-zinc-100'),
 
     // Borders
-    border: isDark ? 'border-white/5' : 'border-black/8',
-    borderBright: isDark ? 'border-white/10' : 'border-black/12',
+    border: isSpace ? 'border-white/10' : (isDark ? 'border-white/5' : 'border-black/5'),
+    borderBright: isSpace ? 'border-white/20' : (isDark ? 'border-white/10' : 'border-black/10'),
 
     // Text
     text: isDark ? 'text-zinc-100' : 'text-zinc-900',
-    textMuted: isDark ? 'text-zinc-400' : 'text-zinc-600', // Darkened for light mode contrast
-    textDim: isDark ? 'text-zinc-500' : 'text-zinc-500',   // Adjusted for visibility
-    accent: isDark ? 'text-sky-400' : 'text-sky-600',
+    textMuted: isDark ? 'text-zinc-400' : 'text-zinc-600',
+    textDim: isDark ? 'text-zinc-500' : 'text-zinc-500',
+    accent: isSpace ? 'text-indigo-400' : (isDark ? 'text-sky-400' : 'text-sky-600'),
 
     // Buttons
-    buttonPrimary: isDark ? 'bg-white text-[#0f1117]' : 'bg-[#1a1a2e] text-white',
+    buttonPrimary: isSpace ? 'bg-indigo-600 text-white' : (isDark ? 'bg-white text-black' : 'bg-black text-white'),
 
     // Hover
-    hoverSurface: isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-[#F8F7F3]',
+    hoverSurface: isSpace ? 'hover:bg-white/10' : (isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-zinc-100'),
   };
   const [criticalAlerts, setCriticalAlerts] = useState<NeedEntity[]>([]);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
@@ -1046,19 +1053,16 @@ export default function App() {
     return '';
   };
 
-    return (
-    <Routes>
-      <Route path="/report" element={<ReportPage />} />
-      <Route path="/*" element={
-        <div className={`flex h-screen w-screen overflow-hidden ${theme.bg} ${theme.text} font-sans transition-all duration-300`}>
+  const mainLayout = (
+    <div className={`flex h-screen w-screen overflow-hidden ${theme.bg} ${theme.text} font-sans transition-all duration-300`}>
       <aside
-        className={`fixed left-4 top-4 bottom-4 z-[2000] flex flex-col transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isSidebarCollapsed ? 'w-[72px]' : 'w-[260px]'
+        className={`fixed left-4 top-4 bottom-4 z-[2000] flex flex-col transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isSidebarCollapsed ? 'w-[72px]' : 'w-[260px]'}
           } bg-[#0D0F14]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-visible group`}
       >
         <button
           onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-12 bg-blue-600 border border-blue-400/30 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-blue-500 transition-all z-[2100] active:scale-90 opacity-0 group-hover:opacity-100"
-          title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          title={isSidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
           <ChevronLeftIcon className={`w-3.5 h-3.5 transition-transform duration-500 ${isSidebarCollapsed ? 'rotate-180' : ''}`} />
         </button>
@@ -1092,7 +1096,6 @@ export default function App() {
                   <div className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-blue-500 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
                 )}
 
-
                 <span className={`flex-shrink-0 transition-transform duration-300 ${isActive ? 'scale-110 text-blue-400' : 'group-hover/item:scale-110 group-hover/item:-rotate-3 text-gray-400 group-hover/item:text-gray-200'}`}>
                   {item.icon}
                 </span>
@@ -1115,7 +1118,7 @@ export default function App() {
         <div className={`p-6 border-t border-white/5 mt-auto ${isSidebarCollapsed ? 'items-center' : ''}`}>
           {!isSidebarCollapsed && (
             <div className="mb-4 px-2">
-              <button 
+              <button
                 onClick={() => window.open('/report', '_blank')}
                 className="w-full py-2 px-3 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600/30 transition-all flex items-center justify-center group"
               >
@@ -1129,10 +1132,10 @@ export default function App() {
           )}
           <div className={`flex gap-3 ${isSidebarCollapsed ? 'flex-col items-center' : 'flex-wrap px-2'}`}>
             {[
-              { id: 1, color: "bg-[#E5243B]", name: "No Poverty" },
-              { id: 3, color: "bg-[#4C9F38]", name: "Health" },
-              { id: 11, color: "bg-[#FD9D24]", name: "Cities" },
-              { id: 13, color: "bg-[#3F7E44]", name: "Climate" }
+              { id: 1, color: 'bg-[#E5243B]', name: 'No Poverty' },
+              { id: 3, color: 'bg-[#4C9F38]', name: 'Health' },
+              { id: 11, color: 'bg-[#FD9D24]', name: 'Cities' },
+              { id: 13, color: 'bg-[#3F7E44]', name: 'Climate' }
             ].map(sdg => (
               <div
                 key={sdg.id}
@@ -1159,11 +1162,15 @@ export default function App() {
                   className={`w-3.5 h-3.5 rounded-full bg-white border transition-all hover:scale-110 ${bgTheme === 'white' ? 'border-gray-500 ring-2 ring-offset-1 ring-gray-400' : 'border-gray-300'}`}
                   title="Pure White"
                 />
-
                 <button
                   onClick={() => setBgTheme('black')}
                   className={`w-3.5 h-3.5 rounded-full bg-black border transition-all hover:scale-110 ${bgTheme === 'black' ? 'border-gray-500 ring-2 ring-offset-1 ring-gray-400' : 'border-gray-300'}`}
                   title="Pure Black"
+                />
+                <button
+                  onClick={() => setBgTheme('space')}
+                  className={`w-3.5 h-3.5 rounded-full bg-indigo-600 border transition-all hover:scale-110 ${bgTheme === 'space' ? 'border-indigo-400 ring-2 ring-offset-1 ring-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.5)]' : 'border-indigo-900'}`}
+                  title="NASA Space Mode"
                 />
               </div>
             </div>
@@ -1205,7 +1212,6 @@ export default function App() {
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/ai-assistant" element={<AiAssistantPage />} />
               <Route path="/history" element={<HistoryPage />} />
-              
             </Routes>
           </div>
         </div>
@@ -1244,37 +1250,42 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {location.pathname === '/' && (
+          <>
+            <button
+              onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+              className={`fixed right-0 top-1/2 -translate-y-1/2 z-[2000] flex items-center justify-center gap-2 px-4 py-3 rounded-l-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-sm shadow-[0_4px_20px_rgba(59,130,246,0.4)] transition-all duration-300 transform ${isAiChatOpen ? 'translate-x-0 w-12' : 'translate-x-0'}`}
+            >
+              {isAiChatOpen ? <span className="text-lg">✕</span> : <><SparklesIcon className="w-5 h-5" /> AI</>}
+            </button>
+
+            <div
+              className={`fixed right-0 top-0 h-full bg-[#27272A] text-white border-l border-black/10 shadow-[-10px_0_30px_rgba(0,0,0,0.1)] transition-all duration-300 ease-in-out z-[1900] flex flex-col overflow-hidden ${isAiChatOpen ? 'translate-x-0 w-[360px]' : 'translate-x-full w-[360px]'}`}
+            >
+              <AiAssistantPage isEmbedded={true} />
+            </div>
+          </>
+        )}
+
+        <VoiceAssistant isOpen={isVoiceOpen} onClose={() => setIsVoiceOpen(false)} apiBase={API_BASE} />
+
+        <VoiceCallModal
+          isOpen={isCallModalOpen}
+          onClose={() => setIsCallModalOpen(false)}
+          onSubmit={(text) => {
+            setIngestText(text);
+            console.log("Transcribed Emergency Call:", text);
+          }}
+        />
       </div>
-
-      {location.pathname === '/' && (
-        <>
-          <button
-            onClick={() => setIsAiChatOpen(!isAiChatOpen)}
-            className={`fixed right-0 top-1/2 -translate-y-1/2 z-[2000] flex items-center justify-center gap-2 px-4 py-3 rounded-l-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-sm shadow-[0_4px_20px_rgba(59,130,246,0.4)] transition-all duration-300 transform ${isAiChatOpen ? 'translate-x-0 w-12' : 'translate-x-0'}`}
-          >
-            {isAiChatOpen ? <span className="text-lg">✕</span> : <><SparklesIcon className="w-5 h-5" /> AI</>}
-          </button>
-
-          <div
-            className={`fixed right-0 top-0 h-full bg-[#27272A] text-white border-l border-black/10 shadow-[-10px_0_30px_rgba(0,0,0,0.1)] transition-all duration-300 ease-in-out z-[1900] flex flex-col overflow-hidden ${isAiChatOpen ? 'translate-x-0 w-[360px]' : 'translate-x-full w-[360px]'}`}
-          >
-            <AiAssistantPage isEmbedded={true} />
-          </div>
-        </>
-      )}
-
-      <VoiceAssistant isOpen={isVoiceOpen} onClose={() => setIsVoiceOpen(false)} apiBase={API_BASE} />
-
-      <VoiceCallModal
-        isOpen={isCallModalOpen}
-        onClose={() => setIsCallModalOpen(false)}
-        onSubmit={(text) => {
-          setIngestText(text);
-          console.log("Transcribed Emergency Call:", text);
-        }}
-      />
     </div>
-      } />
+  );
+
+  return (
+    <Routes>
+      <Route path="/report" element={<ReportPage />} />
+      <Route path="/*" element={mainLayout} />
     </Routes>
   );
 }

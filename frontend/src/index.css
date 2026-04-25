@@ -36,6 +36,14 @@ body {
   font-family: var(--font-mono) !important;
 }
 
+.nasa-bg {
+  background-image: url('/nasa.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
 /* Glassmorphism */
 .glass-header {
   background: rgba(22, 27, 34, 0.7);
