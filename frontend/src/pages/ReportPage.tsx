@@ -125,11 +125,7 @@ export default function ReportPage() {
   };
 
   const startRecording = () => {
-    const win = window as unknown as { 
-      SpeechRecognition?: typeof SpeechRecognition; 
-      webkitSpeechRecognition?: typeof SpeechRecognition; 
-    };
-    const SpeechRec = win.SpeechRecognition || win.webkitSpeechRecognition;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) return alert("Voice not supported");
     
     const recognition = new SpeechRec();

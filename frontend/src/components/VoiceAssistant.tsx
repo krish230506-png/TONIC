@@ -307,7 +307,7 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
   // Initialize Speech Recognition
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRec) {
         const recognition = new SpeechRec();
         recognition.continuous = false;
@@ -379,10 +379,8 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
     if (isOpen) {
       synthRef.current.cancel();
       synthRef.current.resume();
-      setTimeout(() => {
-        resetFlow();
-        speakGreeting();
-      }, 0);
+      resetFlow();
+      speakGreeting();
     } else {
       synthRef.current.cancel();
       if (recognitionRef.current) recognitionRef.current.abort();

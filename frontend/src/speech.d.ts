@@ -35,5 +35,17 @@ interface SpeechRecognitionStatic {
   new (): SpeechRecognition;
 }
 
-declare var SpeechRecognition: SpeechRecognitionStatic;
-declare var webkitSpeechRecognition: SpeechRecognitionStatic;
+declare var SpeechRecognition: {
+  prototype: SpeechRecognition;
+  new (): SpeechRecognition;
+};
+
+declare var webkitSpeechRecognition: {
+  prototype: SpeechRecognition;
+  new (): SpeechRecognition;
+};
+
+interface Window {
+  SpeechRecognition: typeof SpeechRecognition;
+  webkitSpeechRecognition: typeof webkitSpeechRecognition;
+}

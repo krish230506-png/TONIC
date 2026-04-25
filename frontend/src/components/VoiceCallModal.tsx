@@ -24,14 +24,12 @@ export default function VoiceCallModal({ isOpen, onClose, onSubmit }: VoiceCallM
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch { /* ignore */ }
       }
-      setTimeout(() => {
-        setIsListening(false);
-        setTranscript('');
-      }, 0);
+      setIsListening(false);
+      setTranscript('');
       return;
     }
 
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) {
       alert("Voice input is not supported in this browser. Please use Chrome.");
       onClose();

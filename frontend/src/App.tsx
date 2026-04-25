@@ -364,7 +364,7 @@ export default function App() {
   };
 
   const startRecording = async () => {
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRec) {
       alert("Voice input is not supported in this browser. Please use Chrome and type your report.");
