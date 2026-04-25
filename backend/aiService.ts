@@ -67,9 +67,11 @@ export class AIService {
                 },
                 urgencyReasoning: { type: SchemaType.STRING },
                 originalLanguage: { type: SchemaType.STRING },
-                estimatedScale: { type: SchemaType.NUMBER }
+                estimatedScale: { type: SchemaType.NUMBER },
+                precision: { type: SchemaType.NUMBER },
+                isExact: { type: SchemaType.BOOLEAN }
               },
-              required: ['location', 'crisisType', 'urgencyReasoning']
+              required: ['location', 'crisisType', 'urgencyReasoning', 'precision', 'isExact']
             }
           }
         });

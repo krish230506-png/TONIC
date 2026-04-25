@@ -89,6 +89,75 @@ const ChangeView = React.memo(({ center, zoom }: { center: [number, number], zoo
   return null;
 });
 
+// Adaptive Circle Component for Zoom-Aware Visibility and Pinpoint Precision
+const AdaptiveCircle = ({ need, isSelected, onClick }: { 
+  need: any, 
+  isSelected?: boolean, 
+  onClick?: () => void 
+}) => {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+
+  useEffect(() => {
+    const onZoom = () => setZoom(map.getZoom());
+    map.on('zoomend', onZoom);
+    return () => { map.off('zoomend', onZoom); };
+  }, [map]);
+
+  const crisisType = (need.crisisType || 'other').toLowerCase();
+  const baseColor = (() => {
+    switch (crisisType) {
+      case 'medical': return '#EF4444';
+      case 'infrastructure': return '#F59E0B';
+      case 'food': return '#10B981';
+      case 'water':
+      case 'flood': return '#3B82F6';
+      case 'fire': return '#F97316';
+      default: return '#8B9CB8';
+    }
+  })();
+
+  // RADIUS LOGIC:
+  // Zoom Out (5) -> Large radius in meters to be visible
+  // Zoom In (15) -> Small radius in meters to be precise
+  // We use a base pixel size and convert to meters based on zoom
+  const pixelSize = isSelected ? 12 : 8;
+  const metersPerPixel = 40075016.686 * Math.abs(Math.cos(need.location.lat * Math.PI / 180)) / Math.pow(2, zoom + 8);
+  const radiusInMeters = pixelSize * metersPerPixel;
+
+  // For "Exact" locations, we add a solid center point
+  const isExact = need.isExact || (need.precision && need.precision > 0.8);
+
+  return (
+    <>
+      <Circle
+        center={[need.location.lat, need.location.lng]}
+        radius={isSelected ? radiusInMeters * 3 : radiusInMeters}
+        pathOptions={{
+          color: isSelected ? '#FFFFFF' : baseColor,
+          fillColor: baseColor,
+          fillOpacity: isSelected ? 0.4 : 0.6,
+          weight: isSelected ? 2 : 1,
+          className: isSelected ? 'animate-pulse-slow' : ''
+        }}
+        eventHandlers={{ click: onClick }}
+      />
+      {isExact && (
+        <Circle
+          center={[need.location.lat, need.location.lng]}
+          radius={radiusInMeters * 0.2} // Tight pinpoint
+          pathOptions={{
+            color: '#FFFFFF',
+            fillColor: '#FFFFFF',
+            fillOpacity: 1,
+            weight: 1
+          }}
+        />
+      )}
+    </>
+  );
+};
+
 const API_BASE = 'http://localhost:3000';
 
 export default function App() {
@@ -921,34 +990,18 @@ export default function App() {
                   
                   {/* Highlight Circle for Selected Need */}
                   {selectedNeed && selectedNeed.location?.lat && selectedNeed.location?.lng && (
-                    <Circle
-                      center={[selectedNeed.location.lat, selectedNeed.location.lng]}
-                      radius={(selectedNeed.estimatedScale || 10) * 200} // Dynamic radius
-                      pathOptions={{
-                        color: '#3B82F6',
-                        fillColor: '#3B82F6',
-                        fillOpacity: 0.2,
-                        weight: 2,
-                        dashArray: '10, 10',
-                        className: 'animate-pulse-slow' // Custom pulse class
-                      }}
+                    <AdaptiveCircle 
+                      need={selectedNeed} 
+                      isSelected={true} 
                     />
                   )}
 
                   {needs.filter(n => n.status !== 'RESOLVED' && n.location?.lat && n.location?.lng).map(need => (
-                    <Circle
+                    <AdaptiveCircle 
                       key={need.id}
-                      center={[need.location.lat, need.location.lng]}
-                      radius={selectedNeed?.id === need.id ? 2000 : 800} // Larger if selected
-                      pathOptions={{
-                        color: selectedNeed?.id === need.id ? '#FFFFFF' : getCrisisStyle(need.crisisType).borderColor,
-                        fillColor: getCrisisStyle(need.crisisType).borderColor,
-                        fillOpacity: 0.6,
-                        weight: selectedNeed?.id === need.id ? 3 : 1,
-                      }}
-                      eventHandlers={{
-                        click: () => setSelectedNeed(need)
-                      }}
+                      need={need} 
+                      isSelected={selectedNeed?.id === need.id}
+                      onClick={() => setSelectedNeed(need)}
                     />
                   ))}
                 </MapContainer>
