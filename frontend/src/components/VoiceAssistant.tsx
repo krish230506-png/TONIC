@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { MicrophoneIcon, XMarkIcon, CheckCircleIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import { SparklesIcon } from '@heroicons/react/24/solid';
@@ -77,9 +77,9 @@ const LANG_CONFIG: Record<string, { code: string; label: string }> = {
 const SUCCESS_TRANSLATIONS: Record<string, { lang: string, text: string }> = {
   marathi: { lang: 'mr-IN', text: 'तुमची माहिती आम्हाला मिळाली आहे. लवकरच मदत पोहोचवली जाईल. धन्यवाद.' },
   tamil: { lang: 'ta-IN', text: 'உங்கள் அறிக்கை சமர்ப்பிக்கப்பட்டது. உதவி ஒருங்கிணைக்கப்படுகிறது. நன்றி.' },
-  bengali: { lang: 'bn-IN', text: 'আপনার রিপোর্ট জমা দেওয়া হয়েছে। সাহায্যের সমন্বয় করা হচ্ছে। ধন্যবাদ।' },
+  bengali: { lang: 'bn-IN', text: 'আপনার রিপোর্ট জমা দেওয়া হয়েছে। সাহায্যের সমন্বয় করা হচ্ছে। धन्यवाद।' },
   telugu: { lang: 'te-IN', text: 'మీ నివేదిక సమర్పించబడింది. సహాయం సమన్వయం చేయబడుతోంది. ధన్యవాదాలు.' },
-  hindi: { lang: 'hi-IN', text: 'आपकी रिपोर्ट सबमिट कर दी गई है। सहायता समन्वিত की जा रही है। धन्यवाद।' },
+  hindi: { lang: 'hi-IN', text: 'आपकी रिपोर्ट सबमिट कर दी गई है। सहायता समन्वित की जा रही है। धन्यवाद।' },
   english: { lang: 'en-US', text: 'Your report has been submitted. Help is being coordinated. Thank you.' }
 };
 
@@ -103,8 +103,8 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
-  // Correct types for Web Speech API
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis>(window.speechSynthesis);
   const silenceTimerRef = useRef<Timer | null>(null);
   const maxDurationTimerRef = useRef<Timer | null>(null);
@@ -115,8 +115,13 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
   const currentTextRef = useRef(currentText);
   const userLangRef = useRef(userLang);
   const isOpenRef = useRef(isOpen);
-  const isListeningRef = useRef(isListening);
-  const isSpeakingRef = useRef(isSpeaking);
+
+  // The Airlock: Prevents ghost echoes from triggering the next step
+  const isProcessingAnswerRef = useRef(true);
+
+  // Dynamic Ref wrapper to safely use handleNext inside useEffect without causing re-renders
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleNextRef = useRef<any>(null);
 
   useEffect(() => {
     stepRef.current = step;
@@ -124,31 +129,31 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
     currentTextRef.current = currentText;
     userLangRef.current = userLang;
     isOpenRef.current = isOpen;
-    isListeningRef.current = isListening;
-    isSpeakingRef.current = isSpeaking;
-  }, [step, answers, currentText, userLang, isOpen, isListening, isSpeaking]);
+  }, [step, answers, currentText, userLang, isOpen]);
 
-  const clearAllTimers = () => {
+  const clearAllTimers = useCallback(() => {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     if (maxDurationTimerRef.current) clearTimeout(maxDurationTimerRef.current);
-  };
+  }, []);
 
-  const resetFlow = () => {
+  const resetFlow = useCallback(() => {
     setStep(-2);
     setAnswers([]);
     setUserLang("english");
     setCurrentText("");
     setIsListening(false);
     setIsSpeaking(false);
-  };
+    isProcessingAnswerRef.current = true; // Lock immediately on reset
+  }, []);
 
-  const executeSpeech = (text: string, lang = 'en-US', onComplete?: () => void) => {
-    if (isMuted || !isOpen) {
+  const executeSpeech = useCallback((text: string, lang = 'en-US', onComplete?: () => void) => {
+    if (isMuted || !isOpenRef.current) {
       if (onComplete) onComplete();
       return;
     }
 
     setIsSpeaking(true);
+    isProcessingAnswerRef.current = true; // Lock the mic input while speaking
     synthRef.current.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
@@ -176,7 +181,7 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
         setIsSpeaking(false);
         if (onComplete) onComplete();
       }
-    }, 12000);
+    }, 15000);
 
     utterance.onend = () => {
       if (isCanceled || !isOpenRef.current || currentUtteranceRef.current !== utterance) return;
@@ -187,6 +192,7 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
     };
 
     utterance.onerror = (e) => {
+      if (e.error === 'interrupted' || e.error === 'canceled') return; // Expected when skipping
       console.error("Speech Synthesis Error", e);
       if (currentUtteranceRef.current === utterance) {
         setIsSpeaking(false);
@@ -194,36 +200,32 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
       }
     };
 
-    // Small delay to ensure browser speech engine is ready after a cancel()
     setTimeout(() => {
       if (isOpenRef.current && !isCanceled && currentUtteranceRef.current === utterance) {
         synthRef.current.speak(utterance);
       }
-    }, 100);
-  };
+    }, 50);
+  }, [isMuted]);
 
-  const startListening = () => {
-    if (!isOpenRef.current || isSpeakingRef.current) return;
+  const startListening = useCallback(() => {
+    if (!isOpenRef.current) return;
+
+    // ONLY unlock the system to accept input when the microphone intentionally turns on
+    isProcessingAnswerRef.current = false;
+
     if (recognitionRef.current) {
       setCurrentText("");
       currentTextRef.current = "";
       setIsListening(true);
-      isListeningRef.current = true;
-      
-      // Use a small timeout to ensure any previous abort() has finished
-      setTimeout(() => {
-        if (!isOpenRef.current || isSpeakingRef.current) return;
-        try {
-          recognitionRef.current.start();
-        } catch (e) {
-          // If already started, it's fine
-          console.debug('Recognition start failed (expected if already running):', e);
-        }
-      }, 50);
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.debug('Recognition start failed:', e);
+      }
     }
-  };
+  }, []);
 
-  const askLanguage = () => {
+  const askLanguage = useCallback(() => {
     setCurrentText("");
     executeSpeech(
       "Which language are you comfortable in answering? Please say English, Hindi, Marathi, Tamil, Bengali, or Telugu.",
@@ -233,30 +235,22 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
         startListening();
       }
     );
-  };
+  }, [executeSpeech, startListening]);
 
-  const speakGreeting = () => {
-    const fallback = setTimeout(() => {
-      if (stepRef.current === -2) {
-        setStep(-1);
-        askLanguage();
-      }
-    }, 5000);
-
+  const speakGreeting = useCallback(() => {
     executeSpeech(
       "Namaste. Welcome to CommunityPulse Emergency Reporter.",
       'en-IN',
       () => {
-        clearTimeout(fallback);
         if (stepRef.current === -2) {
           setStep(-1);
           askLanguage();
         }
       }
     );
-  };
+  }, [executeSpeech, askLanguage]);
 
-  const askQuestion = (idx: number) => {
+  const askQuestion = useCallback((idx: number) => {
     setCurrentText("");
     const langKey = userLangRef.current || 'english';
     const questionText = LOCALIZED_QUESTIONS[langKey][idx];
@@ -269,11 +263,12 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
     executeSpeech(questionText, synthLang, () => {
       startListening();
     });
-  };
+  }, [executeSpeech, startListening]);
 
-  const submitReport = async (finalAnswers: string[]) => {
+  const submitReport = useCallback(async (finalAnswers: string[]) => {
     setStep(4);
     setIsListening(false);
+    isProcessingAnswerRef.current = true; // Permanent lock
 
     const combinedReport = `Voice Report Transcript:
 Language Setup: ${userLangRef.current}
@@ -290,24 +285,38 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
       const targetLang = SUCCESS_TRANSLATIONS[langKey];
 
       executeSpeech(targetLang.text, targetLang.lang, () => {
-        setTimeout(onClose, 3000);
+        setTimeout(() => {
+          isOpenRef.current = false;
+          onClose();
+        }, 3000);
       });
     } catch (e) {
       console.error("Voice report submission failed", e);
       executeSpeech("Sorry, there was an error submitting your report. Please try again.", 'en-US');
-      setTimeout(onClose, 4000);
+      setTimeout(() => {
+        isOpenRef.current = false;
+        onClose();
+      }, 4000);
     }
-  };
+  }, [apiBase, executeSpeech, onClose]);
 
-  const handleNext = async (explicitLang?: string) => {
-    if (!isListeningRef.current && !explicitLang) return; // Prevent double trigger
-    
-    const finalAnswer = explicitLang || currentTextRef.current;
-    setIsListening(false);
-    isListeningRef.current = false;
-    
+  const handleNext = useCallback(async (answerStr?: string, isExplicitButton = false) => {
+    // If the AI is currently talking, ignore any phantom noise from the microphone
+    if (isProcessingAnswerRef.current && !isExplicitButton) {
+      return;
+    }
+
+    // Instantly lock the Airlock so it doesn't double-fire
+    isProcessingAnswerRef.current = true;
+
+    clearAllTimers();
+    synthRef.current.cancel();
+    setIsSpeaking(false);
+
+    const finalAnswer = answerStr || currentTextRef.current;
+
     if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch (e) {}
+      try { recognitionRef.current.abort(); } catch (e) { }
     }
 
     const currentStep = stepRef.current;
@@ -317,6 +326,7 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
       if (!detectedLang) {
         setCurrentText("Language not caught clearly. Please click a button below.");
         setIsListening(false);
+        isProcessingAnswerRef.current = false; // Unlock so they can try again
         return;
       }
       setUserLang(detectedLang);
@@ -342,11 +352,17 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
         submitReport(newAnswers);
       }
     }
-  };
+  }, [askQuestion, submitReport, clearAllTimers]);
 
-  // Initialize Speech Recognition
+  // Sync ref wrapper
+  useEffect(() => {
+    handleNextRef.current = handleNext;
+  }, [handleNext]);
+
+  // One-time Setup of Speech Engine
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRec) {
         const recognition = new SpeechRec();
@@ -368,14 +384,14 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
             setCurrentText(final);
             currentTextRef.current = final;
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            handleNext(final);
+            handleNextRef.current(final, false); // Route to dynamic ref
           } else {
             setCurrentText(interim);
             currentTextRef.current = interim;
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
             if (interim.trim().length > 0) {
               silenceTimerRef.current = setTimeout(() => {
-                handleNext(interim);
+                handleNextRef.current(interim, false);
               }, 2500);
             }
           }
@@ -383,28 +399,18 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
 
         recognition.onstart = () => {
           setIsListening(true);
-          isListeningRef.current = true;
           if (maxDurationTimerRef.current) clearTimeout(maxDurationTimerRef.current);
           maxDurationTimerRef.current = setTimeout(() => {
             if (currentTextRef.current === "" || !currentTextRef.current) {
-              handleNext();
+              handleNextRef.current("No audio detected", false);
             }
           }, 15000);
         };
 
-        recognition.onend = () => {
-          // Restart if it stopped unexpectedly while we were supposed to be listening
-          if (isOpenRef.current && isListeningRef.current && !isSpeakingRef.current) {
-            setTimeout(() => {
-              if (isOpenRef.current && isListeningRef.current && !isSpeakingRef.current) {
-                try { recognition.start(); } catch (e) {}
-              }
-            }, 100);
-          }
-        };
-
         recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-          console.error("Speech Recognition Error", event.error);
+          if (event.error !== 'aborted') {
+            console.error("Speech Recognition Error", event.error);
+          }
           setIsListening(false);
           clearAllTimers();
         };
@@ -418,41 +424,49 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
       }
     }
 
-    const currentSynth = synthRef.current;
     return () => {
-      currentSynth.cancel();
-      if (recognitionRef.current) recognitionRef.current.abort();
+      // ONLY clean up on hard unmount
+      synthRef.current.cancel();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) { }
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clearAllTimers]); // Empty dependencies ensures this setup only runs ONCE
 
-  // Handle flow when opened
   useEffect(() => {
     if (isOpen) {
       synthRef.current.cancel();
       synthRef.current.resume();
-      // eslint-disable-next-line 
-      resetFlow();
-      speakGreeting();
+
+      setTimeout(() => {
+        resetFlow();
+        speakGreeting();
+      }, 0);
     } else {
       synthRef.current.cancel();
-      if (recognitionRef.current) recognitionRef.current.abort();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) { }
+      }
       clearAllTimers();
+
+      setTimeout(() => {
+        setIsSpeaking(false);
+        setIsListening(false);
+      }, 0);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, speakGreeting, resetFlow, clearAllTimers]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[4000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#0b1120] border border-blue-500/30 rounded-2xl w-full max-w-lg shadow-[0_0_50px_rgba(59,130,246,0.15)] overflow-hidden flex flex-col relative animate-slide-in">
+    <div className="fixed inset-0 z-[4000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-zinc-950 border border-white/10 rounded-3xl w-full max-w-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col relative animate-slide-in">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-white/[0.05]">
+        <div className="flex items-center justify-between p-5 border-b border-white/5 bg-white/5">
           <div className="flex items-center gap-3 text-indigo-400 font-bold">
             <SparklesIcon className="w-5 h-5" />
-            <span className="tracking-wide">Emergency AI Reporter</span>
+            <span className="tracking-wide text-zinc-100">Emergency AI Reporter</span>
             {step >= 0 && (
               <span className="px-2 py-0.5 ml-2 bg-indigo-500/20 text-indigo-300 rounded border border-indigo-500/30 text-[10px] uppercase font-bold tracking-widest">
                 Lang: {LANG_CONFIG[userLang]?.label || 'English'}
@@ -469,18 +483,24 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
                   setIsSpeaking(false);
                 }
               }}
-              className={`p-2 rounded-lg border transition-all ${isMuted ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/40 hover:text-white'}`}
+              className={`p-2 rounded-lg border transition-all ${isMuted ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' : 'bg-white/5 border-white/10 text-white/40 hover:text-white'}`}
               title={isMuted ? "Unmute AI Voice" : "Mute AI Voice"}
             >
               {isMuted ? <span className="text-xs">🔇</span> : <span className="text-xs">🔊</span>}
             </button>
             <button onClick={() => {
+              isOpenRef.current = false;
+              synthRef.current.pause();
               synthRef.current.cancel();
-              if (recognitionRef.current) recognitionRef.current.abort();
+              if (recognitionRef.current) {
+                try { recognitionRef.current.abort(); } catch (e) { }
+              }
               clearAllTimers();
+              setIsSpeaking(false);
+              setIsListening(false);
               onClose();
-            }} className="text-white/40 hover:text-white transition-colors">
-              <XMarkIcon className="w-6 h-6" />
+            }} className="text-white/40 hover:text-white transition-colors bg-white/5 p-2 rounded-lg">
+              <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -492,35 +512,35 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
           <div className="relative flex justify-center items-center w-32 h-32 mb-8">
             {isListening && (
               <>
-                <div className="absolute inset-0 border-[4px] border-blue-500/20 rounded-full animate-pulse-ring"></div>
-                <div className="absolute inset-0 border-[4px] border-blue-500/10 rounded-full animate-pulse-ring" style={{ animationDelay: '0.4s' }}></div>
+                <div className="absolute inset-0 border-[4px] border-indigo-500/20 rounded-full animate-pulse-ring"></div>
+                <div className="absolute inset-0 border-[4px] border-indigo-500/10 rounded-full animate-pulse-ring" style={{ animationDelay: '0.4s' }}></div>
               </>
             )}
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${isListening ? 'bg-blue-600 shadow-[0_0_30px_rgba(37,99,235,0.6)] scale-110' : isSpeaking ? 'bg-indigo-600 animate-pulse' : 'bg-slate-800'}`}>
-              {step === 5 ? <CheckCircleIcon className="w-10 h-10 text-white" /> : <MicrophoneIcon className={`w-10 h-10 text-white ${isListening ? 'animate-bounce' : ''}`} />}
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${isListening ? 'bg-indigo-600 shadow-[0_0_30px_rgba(79,70,229,0.6)] scale-110' : isSpeaking ? 'bg-zinc-800 border border-indigo-500/30 animate-pulse' : 'bg-zinc-900 border border-white/5'}`}>
+              {step === 5 ? <CheckCircleIcon className="w-10 h-10 text-emerald-400" /> : <MicrophoneIcon className={`w-10 h-10 ${isListening ? 'text-white animate-bounce' : 'text-zinc-500'}`} />}
             </div>
           </div>
 
           {/* Text Outputs */}
           {step === -2 && (
-            <p className="text-xl font-medium text-white/90">Initializing Reporter...</p>
+            <p className="text-xl font-medium text-zinc-300">Initializing Reporter...</p>
           )}
 
           {step === -1 && (
             <div className="w-full flex justify-center flex-col items-center">
-              <span className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Language Selection</span>
-              <p className="text-lg font-medium text-white mb-6 leading-relaxed">
+              <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Language Selection</span>
+              <p className="text-lg font-medium text-zinc-200 mb-6 leading-relaxed">
                 Which language are you comfortable in answering? Please say English, Hindi, Marathi, Tamil, Bengali, or Telugu.
               </p>
-              <div className="h-16 w-full flex items-center justify-center italic text-blue-300 font-medium bg-blue-500/5 rounded-lg border border-blue-500/10 px-4 mb-4">
+              <div className="h-16 w-full flex items-center justify-center italic text-indigo-300 font-medium bg-indigo-500/5 rounded-xl border border-indigo-500/10 px-4 mb-4">
                 {isListening ? (currentText || "Listening...") : (isSpeaking ? "Speaking..." : "Please wait...")}
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
                 {['English', 'Hindi', 'Marathi', 'Tamil', 'Bengali', 'Telugu'].map(lang => (
                   <button
                     key={lang}
-                    onClick={() => handleNext(lang)}
-                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600/20 hover:bg-blue-500/40 border border-blue-500/30 text-blue-200 transition-colors"
+                    onClick={() => handleNext(lang, true)}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 transition-colors"
                   >
                     {lang}
                   </button>
@@ -531,11 +551,11 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
 
           {step >= 0 && step < 4 && (
             <div className="w-full flex justify-center flex-col items-center">
-              <span className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Question {step + 1} of 4</span>
-              <p className="text-lg font-medium text-white mb-6 leading-relaxed">
+              <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">Question {step + 1} of 4</span>
+              <p className="text-lg font-medium text-zinc-200 mb-6 leading-relaxed">
                 {LOCALIZED_QUESTIONS[userLang][step]}
               </p>
-              <div className="h-16 w-full flex items-center justify-center italic text-blue-300 font-medium bg-blue-500/5 rounded-lg border border-blue-500/10 px-4">
+              <div className="h-16 w-full flex items-center justify-center italic text-indigo-300 font-medium bg-indigo-500/5 rounded-xl border border-indigo-500/10 px-4">
                 {isListening ? (currentText || "Listening...") : (isSpeaking ? "Speaking..." : "Please wait...")}
               </div>
             </div>
@@ -544,25 +564,25 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
           {step === 4 && (
             <div className="flex flex-col items-center">
               <span className="text-indigo-400 mb-2 font-medium">Processing Audio...</span>
-              <p className="text-gray-400 text-sm">Transmitting to AI engine</p>
+              <p className="text-zinc-500 text-sm">Transmitting to AI engine</p>
             </div>
           )}
 
           {step === 5 && (
             <div className="flex flex-col items-center animate-fade-in">
-              <p className="text-2xl font-bold text-green-400 mb-2">Report Submitted</p>
-              <p className="text-gray-400 leading-relaxed max-w-[280px]">Help is being coordinated. Stay safe.</p>
+              <p className="text-2xl font-bold text-emerald-400 mb-2">Report Submitted</p>
+              <p className="text-zinc-400 leading-relaxed max-w-[280px]">Help is being coordinated. Stay safe.</p>
             </div>
           )}
 
         </div>
 
         {step >= -1 && step < 4 && (
-          <div className="p-4 bg-white/[0.02] border-t border-white/[0.05] flex justify-between items-center">
-            <div className="text-[10px] text-white/20 italic">
+          <div className="p-4 bg-white/5 border-t border-white/5 flex justify-between items-center">
+            <div className="text-[10px] text-zinc-500 italic">
               Tip: You can click the language buttons directly if audio is muted.
             </div>
-            <button onClick={() => { synthRef.current.cancel(); setIsSpeaking(false); handleNext(); }} className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors">
+            <button onClick={() => handleNext("Skipped", true)} className="flex items-center gap-1.5 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 rounded-xl text-sm font-bold transition-colors">
               Skip / Next <ArrowRightIcon className="w-4 h-4" />
             </button>
           </div>
