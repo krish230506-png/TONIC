@@ -77,6 +77,29 @@ const HeatmapOverlay = React.memo(({ data }: { data: { lat: number, lng: number,
   return null;
 });
 
+// Component to listen for custom map events from external UI controls
+const MapEventListener = ({ center, zoom }: { center: [number, number], zoom: number }) => {
+  const map = useMap();
+  
+  useEffect(() => {
+    const handleZoomIn = () => map.zoomIn();
+    const handleZoomOut = () => map.zoomOut();
+    const handleRecenter = () => map.flyTo(center, zoom);
+
+    window.addEventListener('map-zoom-in', handleZoomIn);
+    window.addEventListener('map-zoom-out', handleZoomOut);
+    window.addEventListener('map-recenter', handleRecenter);
+
+    return () => {
+      window.removeEventListener('map-zoom-in', handleZoomIn);
+      window.removeEventListener('map-zoom-out', handleZoomOut);
+      window.removeEventListener('map-recenter', handleRecenter);
+    };
+  }, [map, center, zoom]);
+
+  return null;
+};
+
 // Add this component to handle map re-centering
 const ChangeView = React.memo(({ center, zoom }: { center: [number, number], zoom: number }) => {
   const map = useMap();
@@ -977,6 +1000,7 @@ export default function App() {
               <div className="flex-1 relative">
                 <MapContainer center={center} zoom={5} style={mapContainerStyle} zoomControl={false} scrollWheelZoom={true} attributionControl={false} preferCanvas={true}>
                   <ChangeView center={selectedNeed ? [selectedNeed.location.lat, selectedNeed.location.lng] : center} zoom={selectedNeed ? 14 : 5} />
+                  <MapEventListener center={center} zoom={5} />
                   {mapLayer === 'dark' && (
                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>' />
                   )}
@@ -1005,15 +1029,40 @@ export default function App() {
                     />
                   ))}
                 </MapContainer>
-              </div>
-              <div className="absolute bottom-4 left-4 z-[1000] bg-[rgba(7,11,20,0.85)] backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 shadow-2xl flex items-center space-x-4 text-[10px] font-bold uppercase tracking-wider">
-                <div className="flex items-center">
-                  <span className="w-2 h-2 rounded-full bg-[#EF4444] mr-2"></span>
-                  <span className="text-white/80">🔴 Active Crisis</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-2 h-2 rounded-full bg-[#f97316] mr-2 animate-pulse"></span>
-                  <span className="text-white/80">🟠 Predicted Risk</span>
+                
+                {/* Custom Map Controls (Bottom Right) */}
+                <div className="absolute bottom-6 right-6 z-[1000] flex flex-col gap-3">
+                  <button 
+                    onClick={() => {
+                      // We need a way to trigger map zoom from outside MapContainer or via a component inside
+                      // For now, we'll use a window event or just implement it inside a component
+                      window.dispatchEvent(new CustomEvent('map-zoom-in'));
+                    }}
+                    className="w-12 h-12 bg-[#1C2128]/90 backdrop-blur-md rounded-2xl border border-gray-700/50 flex items-center justify-center text-white hover:bg-gray-800 transition-all shadow-xl active:scale-95"
+                    title="Zoom In"
+                  >
+                    <span className="text-2xl font-light">+</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('map-zoom-out'));
+                    }}
+                    className="w-12 h-12 bg-[#1C2128]/90 backdrop-blur-md rounded-2xl border border-gray-700/50 flex items-center justify-center text-white hover:bg-gray-800 transition-all shadow-xl active:scale-95"
+                    title="Zoom Out"
+                  >
+                    <span className="text-2xl font-light">−</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('map-recenter'));
+                    }}
+                    className="w-12 h-12 bg-[#1C2128]/90 backdrop-blur-md rounded-2xl border border-gray-700/50 flex items-center justify-center text-white hover:bg-gray-800 transition-all shadow-xl active:scale-95"
+                    title="Recenter"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             </section>
