@@ -30,7 +30,7 @@ export class AIService {
 
     try {
       const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.0-flash-lite',
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -93,7 +93,7 @@ export class AIService {
 
     try {
       const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.0-flash-lite',
       });
 
       const parts = [
@@ -132,7 +132,7 @@ export class AIService {
     `;
 
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
       const response = await model.generateContent(prompt);
       return response.response.text();
     } catch (e) {
@@ -145,7 +145,7 @@ export class AIService {
     const userQuery = messages[messages.length - 1].content.toLowerCase();
 
     // 1. CLOUD INTELLIGENCE (Priority)
-    const modelName = 'gemini-1.5-flash';
+    const modelName = 'gemini-2.0-flash-lite';
     try {
       const model = genAI.getGenerativeModel({ model: modelName });
       const prompt = `You are a crisis coordination AI. Context: ${JSON.stringify(contextData)}. User: ${messages[messages.length - 1].content}`;
@@ -212,14 +212,14 @@ export class AIService {
 
     try {
       const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.0-flash-lite',
         generationConfig: { responseMimeType: 'application/json' }
       });
       const response = await model.generateContent(prompt);
       const result = JSON.parse(response.response.text());
       if (result && Array.isArray(result) && result.length > 0) return result;
     } catch (e: any) {
-      console.warn('Prediction attempt failed, using fallback.');
+      console.warn('⚠️ Prediction attempt failed. Error:', e.message || e);
     }
     return fallbackPredictions;
   }

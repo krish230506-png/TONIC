@@ -77,7 +77,7 @@ const LANG_CONFIG: Record<string, { code: string; label: string }> = {
 const SUCCESS_TRANSLATIONS: Record<string, { lang: string, text: string }> = {
   marathi: { lang: 'mr-IN', text: 'तुमची माहिती आम्हाला मिळाली आहे. लवकरच मदत पोहोचवली जाईल. धन्यवाद.' },
   tamil: { lang: 'ta-IN', text: 'உங்கள் அறிக்கை சமர்ப்பிக்கப்பட்டது. உதவி ஒருங்கிணைக்கப்படுகிறது. நன்றி.' },
-  bengali: { lang: 'bn-IN', text: 'আপনার রিপোর্ট জমা দেওয়া হয়েছে। সাহায্যের সমন্বয় করা হচ্ছে। धन्यवाद।' },
+  bengali: { lang: 'bn-IN', text: 'আপনার রিপোর্ট জমা দেওয়া হয়েছে। সাহায্যের সমন্বয় করা হচ্ছে। ধন্যবাদ।' },
   telugu: { lang: 'te-IN', text: 'మీ నివేదిక సమర్పించబడింది. సహాయం సమన్వయం చేయబడుతోంది. ధన్యవాదాలు.' },
   hindi: { lang: 'hi-IN', text: 'आपकी रिपोर्ट सबमिट कर दी गई है। सहायता समन्वित की जा रही है। धन्यवाद।' },
   english: { lang: 'en-US', text: 'Your report has been submitted. Help is being coordinated. Thank you.' }
@@ -257,7 +257,7 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
     const synthLang = LANG_CONFIG[langKey].code;
 
     if (recognitionRef.current) {
-      recognitionRef.current.lang = (idx === 2) ? 'en-IN' : synthLang;
+      recognitionRef.current.lang = (idx === 2 && userLangRef.current === 'english') ? 'en-IN' : synthLang;
     }
 
     executeSpeech(questionText, synthLang, () => {
@@ -266,7 +266,17 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
   }, [executeSpeech, startListening]);
 
   const submitReport = useCallback(async (finalAnswers: string[]) => {
-    setStep(4);
+    const langKey = userLangRef.current || 'english';
+    const submittingText = {
+      english: "Submitting your report. Please wait.",
+      hindi: "आपकी रिपोर्ट सबमिट की जा रही है। कृपया प्रतीक्षा करें।",
+      marathi: "तुमचा रिपोर्ट सबमिट केला जात आहे. कृपया प्रतीक्षा करा.",
+      tamil: "உங்கள் அறிக்கை சமர்ப்பிக்கப்படுகிறது. தயவுசெய்து காத்திருக்கவும்.",
+      bengali: "আপনার রিপোর্ট জমা দেওয়া হচ্ছে। দয়া করে অপেক্ষা করুন।",
+      telugu: "మీ నివేదిక సమర్పించబడుతోంది. దయచేసి వేచి ఉండండి."
+    }[langKey] || "Submitting your report.";
+
+    executeSpeech(submittingText, LANG_CONFIG[langKey].code);
     setIsListening(false);
     isProcessingAnswerRef.current = true; // Permanent lock
 
@@ -281,14 +291,13 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
     try {
       await axios.post(`${apiBase}/ingest`, { text: combinedReport });
       setStep(5);
-      const langKey = userLangRef.current || 'english';
       const targetLang = SUCCESS_TRANSLATIONS[langKey];
 
       executeSpeech(targetLang.text, targetLang.lang, () => {
         setTimeout(() => {
           isOpenRef.current = false;
           onClose();
-        }, 3000);
+        }, 1500); // Faster close
       });
     } catch (e) {
       console.error("Voice report submission failed", e);
@@ -296,19 +305,16 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
       setTimeout(() => {
         isOpenRef.current = false;
         onClose();
-      }, 4000);
+      }, 3000);
     }
   }, [apiBase, executeSpeech, onClose]);
 
   const handleNext = useCallback(async (answerStr?: string, isExplicitButton = false) => {
-    // If the AI is currently talking, ignore any phantom noise from the microphone
     if (isProcessingAnswerRef.current && !isExplicitButton) {
       return;
     }
 
-    // Instantly lock the Airlock so it doesn't double-fire
     isProcessingAnswerRef.current = true;
-
     clearAllTimers();
     synthRef.current.cancel();
     setIsSpeaking(false);
@@ -326,7 +332,7 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
       if (!detectedLang) {
         setCurrentText("Language not caught clearly. Please click a button below.");
         setIsListening(false);
-        isProcessingAnswerRef.current = false; // Unlock so they can try again
+        isProcessingAnswerRef.current = false;
         return;
       }
       setUserLang(detectedLang);
@@ -354,46 +360,36 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
     }
   }, [askQuestion, submitReport, clearAllTimers]);
 
-  // Sync ref wrapper
   useEffect(() => {
     handleNextRef.current = handleNext;
   }, [handleNext]);
 
-  // One-time Setup of Speech Engine
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRec) {
         const recognition = new SpeechRec();
-        recognition.continuous = false;
+        recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
         recognition.onresult = (event: SpeechRecognitionEvent) => {
-          let interim = '';
-          let final = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              final += event.results[i][0].transcript;
-            } else {
-              interim += event.results[i][0].transcript;
-            }
+          let fullTranscript = '';
+          for (let i = 0; i < event.results.length; ++i) {
+            fullTranscript += event.results[i][0].transcript;
           }
-          if (final) {
-            setCurrentText(final);
-            currentTextRef.current = final;
+
+          if (fullTranscript) {
+            setCurrentText(fullTranscript);
+            currentTextRef.current = fullTranscript;
+
             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            handleNextRef.current(final, false); // Route to dynamic ref
-          } else {
-            setCurrentText(interim);
-            currentTextRef.current = interim;
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            if (interim.trim().length > 0) {
-              silenceTimerRef.current = setTimeout(() => {
-                handleNextRef.current(interim, false);
-              }, 2500);
-            }
+
+            silenceTimerRef.current = setTimeout(() => {
+              if (currentTextRef.current === fullTranscript) {
+                handleNextRef.current(fullTranscript, false);
+              }
+            }, 2500);
           }
         };
 
@@ -404,7 +400,7 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
             if (currentTextRef.current === "" || !currentTextRef.current) {
               handleNextRef.current("No audio detected", false);
             }
-          }, 15000);
+          }, 14000);
         };
 
         recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -417,6 +413,9 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
 
         recognition.onend = () => {
           setIsListening(false);
+          if (currentTextRef.current && !isProcessingAnswerRef.current) {
+            handleNextRef.current(currentTextRef.current, false);
+          }
           clearAllTimers();
         };
 
@@ -425,13 +424,12 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
     }
 
     return () => {
-      // ONLY clean up on hard unmount
       synthRef.current.cancel();
       if (recognitionRef.current) {
         try { recognitionRef.current.abort(); } catch (e) { }
       }
     };
-  }, [clearAllTimers]); // Empty dependencies ensures this setup only runs ONCE
+  }, [clearAllTimers]);
 
   useEffect(() => {
     if (isOpen) {
@@ -462,7 +460,6 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
     <div className="fixed inset-0 z-[4000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-zinc-950 border border-white/10 rounded-3xl w-full max-w-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col relative animate-slide-in">
 
-        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/5 bg-white/5">
           <div className="flex items-center gap-3 text-indigo-400 font-bold">
             <SparklesIcon className="w-5 h-5" />
@@ -505,10 +502,7 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
           </div>
         </div>
 
-        {/* Content Body */}
         <div className="p-8 flex flex-col items-center justify-center min-h-[300px] text-center relative">
-
-          {/* Circular Animation Area */}
           <div className="relative flex justify-center items-center w-32 h-32 mb-8">
             {isListening && (
               <>
@@ -521,7 +515,6 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
             </div>
           </div>
 
-          {/* Text Outputs */}
           {step === -2 && (
             <p className="text-xl font-medium text-zinc-300">Initializing Reporter...</p>
           )}
@@ -558,13 +551,6 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
               <div className="h-16 w-full flex items-center justify-center italic text-indigo-300 font-medium bg-indigo-500/5 rounded-xl border border-indigo-500/10 px-4">
                 {isListening ? (currentText || "Listening...") : (isSpeaking ? "Speaking..." : "Please wait...")}
               </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="flex flex-col items-center">
-              <span className="text-indigo-400 mb-2 font-medium">Processing Audio...</span>
-              <p className="text-zinc-500 text-sm">Transmitting to AI engine</p>
             </div>
           )}
 
