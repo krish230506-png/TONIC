@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+﻿import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { VolunteerProfile, NeedEntity } from '../shared/types';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -24,7 +24,7 @@ export class AIService {
         lastError = e;
         // Rotate on 429 (Quota), 404 (Not Found), or 503 (Overloaded)
         if (e.status === 429 || e.status === 404 || e.status === 503) {
-          console.warn(`⚠️ Model ${modelName} unavailable (${e.status}). Rotating...`);
+          console.warn(`âš ï¸ Model ${modelName} unavailable (${e.status}). Rotating...`);
           continue;
         }
         throw e;
@@ -99,7 +99,7 @@ export class AIService {
         return result;
       });
     } catch (e: any) {
-      console.warn('⚠️ All models exhausted or failed:', e.message || e);
+      console.warn('âš ï¸ All models exhausted or failed:', e.message || e);
       return null;
     }
   }
@@ -114,7 +114,7 @@ export class AIService {
           { text: prompt }
         ];
         const response = await model.generateContent(parts);
-        return response.response.text();
+        return response.response.text().trim();
       });
     } catch (e: any) {
       console.error('Audio transcription failed:', e);
@@ -134,15 +134,15 @@ export class AIService {
   }
 
   static async generateDispatchMessage(volunteer: VolunteerProfile, need: NeedEntity): Promise<string> {
-    const prompt = `Compose a short message to dispatch ${volunteer.name} for ${need.crisisType} at ${need.location.name}.`;
+    const prompt = `Generate exactly ONE short dispatch message to send to the volunteer ${volunteer.name} for ${need.crisisType} at ${need.location.name}. Do NOT offer multiple options or explain your reasoning. Do NOT use markdown formatting like ** or *. Output only the message text, nothing else. Example: "${volunteer.name}, please proceed to ${need.location.name} for ${need.crisisType} assistance. Urgent. Please confirm."`;
     try {
       return await this.callWithRotation(async (modelName) => {
         const model = this.getGenAI().getGenerativeModel({ model: modelName });
         const response = await model.generateContent(prompt);
-        return response.response.text();
+        return response.response.text().trim();
       });
     } catch (e) {
-      return `Emergency: ${need.crisisType} at ${need.location.name}. Urgent help needed!`;
+      return `${volunteer.name}, please proceed to ${need.location.name} for ${need.crisisType} assistance. Urgent. Please confirm.`;
     }
   }
 
@@ -152,7 +152,7 @@ export class AIService {
       return await this.callWithRotation(async (modelName) => {
         const model = this.getGenAI().getGenerativeModel({ model: modelName });
         const response = await model.generateContent(prompt);
-        return response.response.text();
+        return response.response.text().trim();
       });
     } catch (e: any) {
       return "[Local Intelligence Fallback] My cloud brain is resting. Please check the database manually.";
