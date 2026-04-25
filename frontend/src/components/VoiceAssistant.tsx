@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { MicrophoneIcon, XMarkIcon, CheckCircleIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import { SparklesIcon } from '@heroicons/react/24/solid';
@@ -77,6 +77,9 @@ const parseUserLanguage = (text: string): string | null => {
   return null;
 };
 
+// Custom type for Timers to avoid NodeJS.Timeout vs window.setTimeout clashes
+type Timer = ReturnType<typeof setTimeout>;
+
 export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssistantProps) {
   const [step, setStep] = useState<number>(-2);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -86,11 +89,11 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
-  // Correct types for Web Speech API
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis>(window.speechSynthesis);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const maxDurationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceTimerRef = useRef<Timer | null>(null);
+  const maxDurationTimerRef = useRef<Timer | null>(null);
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const stepRef = useRef(step);
@@ -105,21 +108,21 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
     userLangRef.current = userLang;
   }, [step, answers, currentText, userLang]);
 
-  const clearAllTimers = () => {
+  const clearAllTimers = useCallback(() => {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     if (maxDurationTimerRef.current) clearTimeout(maxDurationTimerRef.current);
-  };
+  }, []);
 
-  const resetFlow = () => {
+  const resetFlow = useCallback(() => {
     setStep(-2);
     setAnswers([]);
     setUserLang("english");
     setCurrentText("");
     setIsListening(false);
     setIsSpeaking(false);
-  };
+  }, []);
 
-  const executeSpeech = (text: string, lang = 'en-US', onComplete?: () => void) => {
+  const executeSpeech = useCallback((text: string, lang = 'en-US', onComplete?: () => void) => {
     if (isMuted || !isOpen) {
       if (onComplete) onComplete();
       return;
@@ -172,9 +175,9 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
     setTimeout(() => {
       if (!isCanceled) synthRef.current.speak(utterance);
     }, 50);
-  };
+  }, [isMuted, isOpen]);
 
-  const startListening = () => {
+  const startListening = useCallback(() => {
     if (!isOpen) return;
     if (recognitionRef.current) {
       setCurrentText("");
@@ -186,9 +189,9 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
         console.debug('Recognition start failed:', e);
       }
     }
-  };
+  }, [isOpen]);
 
-  const askLanguage = () => {
+  const askLanguage = useCallback(() => {
     setCurrentText("");
     executeSpeech(
       "Which language are you comfortable in answering? Please say English, Hindi, Marathi, Tamil, Bengali, or Telugu.",
@@ -198,9 +201,9 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
         startListening();
       }
     );
-  };
+  }, [executeSpeech, startListening]);
 
-  const speakGreeting = () => {
+  const speakGreeting = useCallback(() => {
     const fallback = setTimeout(() => {
       if (stepRef.current === -2) {
         setStep(-1);
@@ -219,9 +222,9 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
         }
       }
     );
-  };
+  }, [executeSpeech, askLanguage]);
 
-  const askQuestion = (idx: number) => {
+  const askQuestion = useCallback((idx: number) => {
     setCurrentText("");
     const langKey = userLangRef.current || 'english';
     const questionText = LOCALIZED_QUESTIONS[langKey][idx];
@@ -234,9 +237,9 @@ export default function VoiceAssistant({ isOpen, onClose, apiBase }: VoiceAssist
     executeSpeech(questionText, synthLang, () => {
       startListening();
     });
-  };
+  }, [executeSpeech, startListening]);
 
-  const submitReport = async (finalAnswers: string[]) => {
+  const submitReport = useCallback(async (finalAnswers: string[]) => {
     setStep(4);
     setIsListening(false);
 
@@ -262,9 +265,9 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
       executeSpeech("Sorry, there was an error submitting your report. Please try again.", 'en-US');
       setTimeout(onClose, 4000);
     }
-  };
+  }, [apiBase, executeSpeech, onClose]);
 
-  const handleNext = async (explicitLang?: string) => {
+  const handleNext = useCallback(async (explicitLang?: string) => {
     const finalAnswer = explicitLang || currentTextRef.current;
     if (recognitionRef.current) recognitionRef.current.abort();
 
@@ -300,11 +303,11 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
         submitReport(newAnswers);
       }
     }
-  };
+  }, [askQuestion, submitReport]);
 
-  // Initialize Speech Recognition
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
@@ -312,6 +315,7 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognition.onresult = (event: any) => {
           let interim = '';
           let final = '';
@@ -349,6 +353,7 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
           }, 15000);
         };
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognition.onerror = (event: any) => {
           console.error("Speech Recognition Error", event.error);
           setIsListening(false);
@@ -369,21 +374,29 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
       currentSynth.cancel();
       if (recognitionRef.current) recognitionRef.current.abort();
     };
-  }, []); // handleNext is a ref-based function now effectively, but we'll leave it as is for stability
-
-  // Handle flow when opened
+  }, [handleNext, clearAllTimers]);
   useEffect(() => {
     if (isOpen) {
       synthRef.current.cancel();
       synthRef.current.resume();
-      resetFlow();
-      speakGreeting();
+
+      // Defer state updates to avoid synchronous cascade warnings
+      setTimeout(() => {
+        resetFlow();
+        speakGreeting();
+      }, 0);
     } else {
       synthRef.current.cancel();
       if (recognitionRef.current) recognitionRef.current.abort();
       clearAllTimers();
+
+      // Defer state updates to avoid synchronous cascade warnings
+      setTimeout(() => {
+        setIsSpeaking(false);
+        setIsListening(false);
+      }, 0);
     }
-  }, [isOpen]);
+  }, [isOpen, speakGreeting, resetFlow, clearAllTimers]);
 
   if (!isOpen) return null;
 
@@ -391,7 +404,6 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
     <div className="fixed inset-0 z-[4000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-[#0b1120] border border-blue-500/30 rounded-2xl w-full max-w-lg shadow-[0_0_50px_rgba(59,130,246,0.15)] overflow-hidden flex flex-col relative animate-slide-in">
 
-        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/[0.05]">
           <div className="flex items-center gap-3 text-indigo-400 font-bold">
             <SparklesIcon className="w-5 h-5" />
@@ -417,21 +429,20 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
             >
               {isMuted ? <span className="text-xs">🔇</span> : <span className="text-xs">🔊</span>}
             </button>
-            <button onClick={() => { 
-              synthRef.current.cancel(); 
-              if (recognitionRef.current) recognitionRef.current.abort(); 
+            <button onClick={() => {
+              synthRef.current.cancel();
+              if (recognitionRef.current) recognitionRef.current.abort();
               clearAllTimers();
-              onClose(); 
+              setIsSpeaking(false);
+              setIsListening(false);
+              onClose();
             }} className="text-white/40 hover:text-white transition-colors">
               <XMarkIcon className="w-6 h-6" />
             </button>
           </div>
         </div>
 
-        {/* Content Body */}
         <div className="p-8 flex flex-col items-center justify-center min-h-[300px] text-center relative">
-
-          {/* Circular Animation Area */}
           <div className="relative flex justify-center items-center w-32 h-32 mb-8">
             {isListening && (
               <>
@@ -444,7 +455,6 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
             </div>
           </div>
 
-          {/* Text Outputs */}
           {step === -2 && (
             <p className="text-xl font-medium text-white/90">Initializing Reporter...</p>
           )}
@@ -497,7 +507,6 @@ Note: Parse intelligently considering the user spoke in ${userLangRef.current}.`
               <p className="text-gray-400 leading-relaxed max-w-[280px]">Help is being coordinated. Stay safe.</p>
             </div>
           )}
-
         </div>
 
         {step >= -1 && step < 4 && (

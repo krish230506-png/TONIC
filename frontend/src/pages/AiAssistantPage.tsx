@@ -123,7 +123,7 @@ export default function AiAssistantPage({ isEmbedded = false }: { isEmbedded?: b
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#070B14] relative">
+    <div className="h-full flex flex-col bg-transparent relative">
       {/* Header - Hidden when embedded in dashboard */}
       {!isEmbedded && (
         <div className="flex-shrink-0 p-6 border-b border-white/[0.06] flex justify-between items-center bg-[#0B1120]">

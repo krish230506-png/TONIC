@@ -482,7 +482,7 @@ async function updatePredictions() {
 
 // Initial update and 90s interval
 updatePredictions();
-setInterval(updatePredictions, 90000);
+setInterval(updatePredictions, 300000);
 
 app.get('/api/predictions', (req, res) => {
   res.json({

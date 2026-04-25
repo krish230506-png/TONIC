@@ -145,23 +145,15 @@ export class AIService {
     const userQuery = messages[messages.length - 1].content.toLowerCase();
 
     // 1. CLOUD INTELLIGENCE (Priority)
-    const modelsToTry = [
-      'gemini-2.0-flash',
-      'gemini-flash-latest',
-      'gemini-pro-latest'
-    ];
-
-    for (const modelName of modelsToTry) {
-      try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const prompt = `You are a crisis coordination AI.Context: ${JSON.stringify(contextData)}.User: ${messages[messages.length - 1].content} `;
-        const response = await model.generateContent(prompt);
-        const text = response.response.text();
-        if (text) return text;
-      } catch (e: any) {
-        console.warn(`Cloud attempt(${modelName}) failed: ${e.message} `);
-        continue;
-      }
+    const modelName = 'gemini-1.5-flash';
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const prompt = `You are a crisis coordination AI. Context: ${JSON.stringify(contextData)}. User: ${messages[messages.length - 1].content}`;
+      const response = await model.generateContent(prompt);
+      const text = response.response.text();
+      if (text) return text;
+    } catch (e: any) {
+      console.warn(`Cloud attempt failed: ${e.message}`);
     }
 
     // 2. SAFETY NET (LHI Fallback)
@@ -188,78 +180,47 @@ export class AIService {
     return "[Local Intelligence Fallback] My cloud brain is currently resting due to high traffic, but my local scanners show " + incidents.length + " active crises and " + volunteers.filter((v: any) => v.available).length + " available volunteers. What specific metric can I look up for you in the database?";
   }
 
-  static async getPredictions(incidents: any[]): Promise<any[]> {
-    // High-quality fallback data for demo completeness
+    static async getPredictions(incidents: any[]): Promise<any[]> {
     const fallbackPredictions = [
       {
         "city": "Mumbai",
         "predictedCrisisType": "flood",
         "riskLevel": "HIGH",
         "confidenceScore": 88,
-        "reasoning": "Early monsoon surge detected in satellite imagery for the suburban coastal belt.",
-        "recommendedPreventiveAction": "Stage rescue boats and portable pumps in low-lying Kurla and Chembur."
+        "reasoning": "Early monsoon surge detected in satellite imagery.",
+        "recommendedPreventiveAction": "Stage rescue boats in low-lying Kurla."
       },
       {
         "city": "Delhi",
         "predictedCrisisType": "fire",
         "riskLevel": "CRITICAL",
         "confidenceScore": 92,
-        "reasoning": "Heatwave escalation paired with extreme power grid load in industrial clusters.",
-        "recommendedPreventiveAction": "Mobilize all fire tankers to Okhla and Bawana industrial areas."
+        "reasoning": "Heatwave escalation paired with power grid load.",
+        "recommendedPreventiveAction": "Mobilize fire tankers to industrial clusters."
       },
       {
         "city": "Bengaluru",
         "predictedCrisisType": "medical",
         "riskLevel": "MEDIUM",
         "confidenceScore": 64,
-        "reasoning": "Pattern of localized water reports indicates a potential gastroenteritis spike.",
-        "recommendedPreventiveAction": "Distribute hygiene kits and verify pharmaceutical stockpiles in local clinics."
+        "reasoning": "Localized water reports indicate gastroenteritis spike.",
+        "recommendedPreventiveAction": "Distribute hygiene kits to local clinics."
       }
     ];
 
-    const prompt = `
-      You are a crisis prediction AI for India.Analyze these current active crises and their patterns:
-      ${JSON.stringify(incidents)}
+    const prompt = `Analyze these crises and predict TOP 3 likely escalations: ${JSON.stringify(incidents)}. Return JSON array with city, predictedCrisisType, riskLevel, confidenceScore, reasoning, recommendedPreventiveAction.`;
 
-      Based on: crisis clustering by city, time patterns, types of crises already occurring, seasonal factors for India in April, and historical escalation patterns — predict the TOP 3 cities or areas most likely to report a NEW crisis in the next 6 hours.
-      
-      Output JSON strictly matching this schema:
-    [
-      {
-        "city": string,
-        "predictedCrisisType": "flood" | "fire" | "medical" | "shelter" | "water" | "infrastructure",
-        "riskLevel": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
-        "confidenceScore": number(0 - 100),
-        "reasoning": string(1 sentence),
-        "recommendedPreventiveAction": string(1 sentence)
-      }
-    ]
-    `;
-
-    // Try multiple models for the prediction engine
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro'];
-
-    for (const modelName of modelsToTry) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: { responseMimeType: 'application/json' }
-        });
-
-        const response = await model.generateContent(prompt);
-        const result = JSON.parse(response.response.text());
-
-        // If AI returns valid but empty data, use our high-quality fallback
-        if (result && Array.isArray(result) && result.length > 0) {
-          return result;
-        }
-      } catch (e: any) {
-        console.warn(`Prediction attempt(${modelName}) failed: ${e.message} `);
-        continue;
-      }
+    try {
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: 'application/json' }
+      });
+      const response = await model.generateContent(prompt);
+      const result = JSON.parse(response.response.text());
+      if (result && Array.isArray(result) && result.length > 0) return result;
+    } catch (e: any) {
+      console.warn('Prediction attempt failed, using fallback.');
     }
-
-    // Default return if all AI attempts fail or return empty datasets
     return fallbackPredictions;
   }
 }

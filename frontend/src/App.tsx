@@ -1,11 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
+import React, { useEffect, useState, useRef } from 'react';
 import type { NeedEntity, VolunteerProfile, Prediction } from './types';
 import { MapContainer, TileLayer, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.heat';
 import { formatDistanceToNow, differenceInMinutes, format } from 'date-fns';
-import { BoltIcon, ExclamationTriangleIcon, PaperAirplaneIcon, SignalIcon, SignalSlashIcon, MicrophoneIcon, StopCircleIcon, BellAlertIcon, PhoneIcon, ChevronLeftIcon, SparklesIcon, CameraIcon, XMarkIcon as XMarkMini } from '@heroicons/react/24/outline';
+
 import { saveOfflineReport, syncOfflineReports, clearOfflineQueue } from './offlineSync';
 
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
@@ -13,11 +13,26 @@ import VolunteersPage from './pages/VolunteersPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import HistoryPage from './pages/HistoryPage';
 import AiAssistantPage from './pages/AiAssistantPage';
+import ReportPage from './pages/ReportPage';
 import VoiceAssistant from './components/VoiceAssistant';
 import VoiceCallModal from './components/VoiceCallModal';
 import PredictionAlertBar from './components/PredictionAlertBar';
 
-const API_BASE = 'http://localhost:3000';
+import {
+  SquaresFourIcon,
+  UsersThreeIcon,
+  ChartLineUpIcon,
+  ClockCounterClockwiseIcon
+} from '@phosphor-icons/react';
+
+// Restored Heroicons for general UI elements
+import {
+  BoltIcon, ExclamationTriangleIcon, PaperAirplaneIcon,
+  SignalSlashIcon, MicrophoneIcon, StopCircleIcon, BellAlertIcon,
+  PhoneIcon, ChevronLeftIcon, SparklesIcon, CameraIcon,
+  XMarkIcon as XMarkMini
+} from '@heroicons/react/24/outline';
+
 
 if (typeof window !== 'undefined') {
   (window as unknown as { L: typeof L }).L = L;
@@ -27,32 +42,29 @@ const mapContainerStyle = { width: '100%', height: '100%', borderRadius: '0.75re
 const center: [number, number] = [20.5937, 78.9629];
 
 // Custom Heatmap Layer using leaflet.heat
-function HeatmapOverlay({ data }: { data: { lat: number, lng: number, weight: number }[] }) {
+const HeatmapOverlay = React.memo(({ data }: { data: { lat: number, lng: number, weight: number }[] }) => {
   const map = useMap();
 
   useEffect(() => {
     if (!data || data.length === 0) return;
 
-    // Heatmap data format: [[lat, lng, intensity], ...]
-    const points = data.map(p => [p.lat, p.lng, p.weight]);
+    const points = data.map(p => [p.lat, p.lng, p.weight] as [number, number, number]);
 
-    // @ts-expect-error - leaflet.heat is a plugin
     if (!L.heatLayer) {
       console.warn("Leaflet.heat not loaded yet...");
       return;
     }
-    // @ts-expect-error - leaflet.heat is a plugin
+
     const heatLayer = L.heatLayer(points, {
       radius: 25,
       blur: 15,
       max: 100,
       gradient: {
-        0.0: 'rgba(0, 255, 0, 0)',
-        0.2: 'rgba(0, 255, 0, 1)',
-        0.4: 'rgba(173, 255, 47, 1)',
-        0.6: 'rgba(255, 215, 0, 1)',
-        0.8: 'rgba(255, 140, 0, 1)',
-        1.0: 'rgba(255, 0, 0, 1)'
+        0.0: 'rgba(0, 0, 0, 0)',
+        0.3: 'rgba(56, 189, 248, 1)', // Sky blue
+        0.5: 'rgba(139, 92, 246, 1)', // Violet
+        0.8: 'rgba(244, 63, 94, 1)',  // Rose red
+        1.0: 'rgba(255, 255, 255, 1)' // White hot center
       }
     }).addTo(map);
 
@@ -62,10 +74,10 @@ function HeatmapOverlay({ data }: { data: { lat: number, lng: number, weight: nu
   }, [data, map]);
 
   return null;
-}
+});
 
 // Add this component to handle map re-centering
-function ChangeView({ center, zoom }: { center: [number, number], zoom: number }) {
+const ChangeView = React.memo(({ center, zoom }: { center: [number, number], zoom: number }) => {
   const map = useMap();
   useEffect(() => {
     map.flyTo(center, zoom, {
@@ -74,9 +86,18 @@ function ChangeView({ center, zoom }: { center: [number, number], zoom: number }
     });
   }, [center, zoom, map]);
   return null;
-}
+});
+
+const API_BASE = 'http://localhost:3000';
 
 export default function App() {
+  const navItems = [
+    { path: '/', label: 'Dashboard', icon: <SquaresFourIcon weight="duotone" size={24} /> },
+    { path: '/volunteers', label: 'Volunteers', icon: <UsersThreeIcon weight="duotone" size={24} /> },
+    { path: '/analytics', label: 'Analytics', icon: <ChartLineUpIcon weight="duotone" size={24} /> },
+    { path: '/history', label: 'History', icon: <ClockCounterClockwiseIcon weight="duotone" size={24} /> },
+  ];
+
   const [needs, setNeeds] = useState<NeedEntity[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [selectedNeed, setSelectedNeed] = useState<NeedEntity | null>(null);
@@ -84,9 +105,6 @@ export default function App() {
   const [loadingDispatch, setLoadingDispatch] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [shake, setShake] = useState(false);
-
-  // Offline UI
-  const [offlineSyncMessage, setOfflineSyncMessage] = useState<string | null>(null);
 
   // Ingest form
   const [ingestText, setIngestText] = useState('');
@@ -97,7 +115,7 @@ export default function App() {
   const [ingestStatusColor, setIngestStatusColor] = useState<string>('text-blue-400');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Audio Recording — now uses Web Speech API (SpeechRecognition)
+  // Audio Recording
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
@@ -125,7 +143,43 @@ export default function App() {
   }, [isSidebarCollapsed]);
 
   // UI State
-  const [mapLayer, setMapLayer] = useState<'dark' | 'satellite'>('dark');
+  const [mapLayer, setMapLayer] = useState<'dark' | 'light' | 'satellite'>('light');
+  const [bgTheme, setBgTheme] = useState<'white' | 'black'>(() => {
+    return (localStorage.getItem('bgTheme') as 'white' | 'black') || 'black';
+  });
+  const isDark = bgTheme === 'black';
+
+  useEffect(() => {
+    localStorage.setItem('bgTheme', bgTheme);
+  }, [bgTheme]);
+
+
+  const theme = {
+    // Backgrounds
+    bg: isDark ? 'bg-[#0f1117]' : 'bg-[#F0EEE8]',
+    surface: isDark ? 'bg-zinc-900/80 backdrop-blur-2xl' : 'bg-white',
+    surfaceSoft: isDark ? 'bg-zinc-800/50' : 'bg-[#EEEcE6]',
+    surfaceCard: isDark ? 'bg-zinc-900' : 'bg-white',
+    surfacePanel: isDark ? 'bg-zinc-900/50' : 'bg-[#EEEcE6]',
+    sidebar: 'bg-[#1a1a2e]', // Always dark
+    banner: 'bg-[#1a1a2e]', // Always dark
+
+    // Borders
+    border: isDark ? 'border-white/5' : 'border-black/8',
+    borderBright: isDark ? 'border-white/10' : 'border-black/12',
+
+    // Text
+    text: isDark ? 'text-zinc-100' : 'text-zinc-900',
+    textMuted: isDark ? 'text-zinc-400' : 'text-zinc-600', // Darkened for light mode contrast
+    textDim: isDark ? 'text-zinc-500' : 'text-zinc-500',   // Adjusted for visibility
+    accent: isDark ? 'text-sky-400' : 'text-sky-600',
+
+    // Buttons
+    buttonPrimary: isDark ? 'bg-white text-[#0f1117]' : 'bg-[#1a1a2e] text-white',
+
+    // Hover
+    hoverSurface: isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-[#F8F7F3]',
+  };
   const [criticalAlerts, setCriticalAlerts] = useState<NeedEntity[]>([]);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -133,12 +187,9 @@ export default function App() {
 
   // New Layout State
   const [showBanner, setShowBanner] = useState(true);
-  const [timeStr, setTimeStr] = useState(new Date().toLocaleTimeString());
 
   const location = useLocation();
   const navigate = useNavigate();
-
-
 
   useEffect(() => {
     const fetchPredictions = async () => {
@@ -152,13 +203,6 @@ export default function App() {
     fetchPredictions();
     const interval = setInterval(fetchPredictions, 30000);
     return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeStr(new Date().toLocaleTimeString());
-    }, 1000); // Update every second for live timers
-    return () => clearInterval(timer);
   }, []);
 
   const handleClearSelection = () => {
@@ -177,16 +221,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, []);
 
-  const fetchVolunteers = async () => {
-    try {
-      const response = await axios.get(`${API_BASE}/volunteers`);
-      setVolunteers(response.data);
-    } catch (e) {
-      console.error("Error fetching volunteers:", e);
-    }
-  };
-
   useEffect(() => {
+    const fetchVolunteers = async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/volunteers`);
+        setVolunteers(response.data);
+      } catch (e) {
+        console.error("Error fetching volunteers:", e);
+      }
+    };
     void fetchVolunteers();
   }, []);
 
@@ -194,7 +237,6 @@ export default function App() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isCallModalOpen, setIsCallModalOpen] = useState(false);
-  const [simCount, setSimCount] = useState(0);
   const simTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const mockScenarios = [
@@ -208,14 +250,12 @@ export default function App() {
   const stopSimulation = () => {
     if (simTimerRef.current) clearInterval(simTimerRef.current);
     setIsSimulating(false);
-    setSimCount(0);
   };
 
   const startSimulation = () => {
     setIsSimulating(true);
-    setSimCount(0);
-
     let count = 0;
+
     const triggerSim = async () => {
       const scenario = mockScenarios[Math.floor(Math.random() * mockScenarios.length)];
       try {
@@ -224,7 +264,6 @@ export default function App() {
         console.error("Simulated ingestion failed:", err);
       }
       count++;
-      setSimCount(count);
       if (count >= 5) stopSimulation();
     };
 
@@ -233,16 +272,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Request notification permission for simulated FCM
     if ("Notification" in window) {
       Notification.requestPermission();
     }
 
     const doSync = async () => {
       await syncOfflineReports(API_BASE, (count) => {
-        setOfflineSyncMessage(`Syncing ${count} queued reports...`);
+        console.log(`Syncing ${count} queued reports...`);
       });
-      setTimeout(() => setOfflineSyncMessage(null), 3000);
     };
 
     const handleOnline = () => { setIsOnline(true); doSync(); };
@@ -266,8 +303,6 @@ export default function App() {
         const response = await axios.get(`${API_BASE}/needs`);
         const fetchedNeeds: NeedEntity[] = response.data;
 
-        // Auto-Alert Logic (Priority > 80 or unassigned > 30mins)
-        // Find the most critical actionable incident that hasn't been assigned
         const actionableAlert = fetchedNeeds.find(n =>
           n.status !== 'RESOLVED' &&
           (n.criticalityScore > 80 || (now - n.reportedAt > 30 * 60 * 1000))
@@ -292,7 +327,7 @@ export default function App() {
     const interval = setInterval(fetchNeeds, 3000);
     return () => clearInterval(interval);
   }, [isOnline, criticalAlerts, dismissedAlertIds, now]);
-  // Auto-dismiss critical alerts
+
   useEffect(() => {
     if (criticalAlerts.length === 0) return;
     const timer = setTimeout(() => {
@@ -328,14 +363,17 @@ export default function App() {
     interface SpeechRecognitionError {
       error: string;
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
     if (!SpeechRecognition) {
       alert("Voice input is not supported in this browser. Please use Chrome and type your report.");
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN'; // Supports Indian English, Hindi accents
+    recognition.lang = 'en-IN';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
@@ -367,7 +405,6 @@ export default function App() {
     mediaRecorderRef.current = recognition as unknown as MediaRecorder;
     recognition.start();
 
-    // Auto-stop after 15 seconds
     setTimeout(() => {
       try {
         recognition.stop();
@@ -389,11 +426,6 @@ export default function App() {
     }
   };
 
-  // processAudio kept for compatibility but no longer used with Web Speech API
-
-
-
-
   const handleClearAll = async () => {
     if (!window.confirm("Are you sure you want to clear all rescue signals and the offline queue?")) return;
     try {
@@ -409,37 +441,21 @@ export default function App() {
     }
   };
 
-
-
-  useEffect(() => {
-    let timer1: NodeJS.Timeout;
-    let timer2: NodeJS.Timeout;
-    let timer3: NodeJS.Timeout;
-
-    if (isIngesting) {
-      setIngestStatus("📡 Sending to Gemini AI...");
-      setIngestStatusColor("text-blue-400");
-
-      timer1 = setTimeout(() => {
-        setIngestStatus("🧠 Extracting location, type and scale...");
-      }, 1500);
-
-      timer2 = setTimeout(() => {
-        setIngestStatus("⏳ Almost done...");
-      }, 3000);
-    }
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
-  }, [isIngesting]);
-
   const handleIngest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ingestText.trim() && !selectedImage) return;
     setIsIngesting(true);
+
+    setIngestStatus("📡 Sending to Gemini AI...");
+    setIngestStatusColor("text-blue-400");
+
+    const timer1 = setTimeout(() => {
+      setIngestStatus("🧠 Extracting location, type and scale...");
+    }, 1500);
+
+    const timer2 = setTimeout(() => {
+      setIngestStatus("⏳ Almost done...");
+    }, 3000);
 
     try {
       if (!isOnline) {
@@ -480,15 +496,10 @@ export default function App() {
     } catch (error: unknown) {
       console.error("Submission failed:", error);
       const isUnclear = axios.isAxiosError(error) && error.response?.status === 422;
-      const errorMsg = axios.isAxiosError(error)
-        ? (error.response?.data?.error || error.message)
-        : (error instanceof Error ? error.message : "Unknown error");
 
       if (isUnclear) {
         setIngestStatus("⚠️ Could not understand input — add location and crisis type");
         setIngestStatusColor("text-amber-400");
-
-        // 🔴 ADD THIS
         setShake(true);
         setTimeout(() => setShake(false), 400);
       } else {
@@ -501,6 +512,8 @@ export default function App() {
       }
     } finally {
       setIsIngesting(false);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
     }
   };
 
@@ -521,8 +534,6 @@ export default function App() {
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
-
-
 
   const getScoreColor = (score: number) => {
     if (score > 70) return 'bg-red-600 text-white';
@@ -598,7 +609,6 @@ export default function App() {
 
   const dashboardContent = (
     <div className={`flex-1 flex flex-row overflow-hidden relative h-full transition-all duration-300 ease-in-out ${isAiChatOpen ? 'pr-[360px]' : 'pr-0'}`}>
-      {/* Offline Banner */}
       {!isOnline && (
         <div className="absolute top-0 left-0 right-0 z-[3000] bg-amber-600 text-white text-[11px] font-bold py-1.5 px-4 flex items-center justify-center gap-2 shadow-lg animate-pulse">
           <SignalSlashIcon className="w-4 h-4" />
@@ -607,19 +617,16 @@ export default function App() {
       )}
 
       <div className="flex-1 flex flex-col p-6 overflow-y-auto custom-scrollbar box-border h-full relative">
-        {/* Toast Notification */}
         {toastMessage && (
           <div className={`absolute bottom-6 right-6 z-[2000] px-4 py-3 rounded shadow-lg animate-slide-in ${toastMessage.includes('⚠️') ? 'bg-amber-500 text-black font-bold border border-amber-400' : 'bg-green-600 text-white'}`}>
             {toastMessage}
           </div>
         )}
 
-        {/* Prediction Engine Alert Bar */}
         <PredictionAlertBar predictions={predictions} />
 
-        {/* Top Banner */}
         {showBanner && (
-          <div className="flex-shrink-0 mb-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/15 rounded-xl p-4 flex justify-between items-center relative shadow-xl overflow-hidden">
+          <div className="flex-shrink-0 mb-6 bg-[#27272A] border border-gray-800 rounded-2xl p-4 flex justify-between items-center relative shadow-[0_8px_30px_rgb(0,0,0,0.08)] overflow-hidden">
             <div className="flex items-center space-x-6">
               <h3 className="font-bold text-white tracking-wide ml-2 whitespace-nowrap">🚨 CommunityPulse AI is live and monitoring {new Set(needs.filter(n => n?.location?.name).map(n => n.location.name)).size || 4} cities</h3>
 
@@ -661,10 +668,9 @@ export default function App() {
 
         <div className="flex-1 flex flex-col gap-10 box-border pb-20">
           <div className="flex flex-col xl:flex-row gap-6 items-start">
-            {/* PANEL 1: Live Ingestion Feed (Vertical Sideways) - Moved to Left */}
-            <section className="w-full xl:w-[450px] bg-[#1e1e1e] rounded-2xl border border-gray-800 flex flex-col shadow-2xl overflow-hidden h-[750px]">
-              <div className="p-5 border-b border-gray-800 bg-[#252525] flex justify-between items-center">
-                <h2 className="text-lg font-bold flex items-center text-white">
+            <section className={`w-full xl:w-[450px] ${theme.surface} rounded-[2rem] border ${theme.border} flex flex-col shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden h-[750px]`}>
+              <div className={`p-5 border-b ${theme.border} ${theme.surface} flex justify-between items-center`}>
+                <h2 className={`text-lg font-bold flex items-center ${theme.text}`}>
                   <ExclamationTriangleIcon className="h-5 w-5 mr-3 text-warning" />
                   Signals
                 </h2>
@@ -673,14 +679,14 @@ export default function App() {
                   <select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as 'newest' | 'score_desc' | 'score_asc' | 'city' | 'sla' | 'type')}
-                    className="bg-[#16202E] border border-white/10 text-[#8B9CB8] text-[0.65rem] rounded-md px-1.5 py-1 cursor-pointer outline-none hover:border-white/20 transition-all focus:border-blue-500/50"
+                    className={`${theme.surfaceSoft} border ${theme.border} ${theme.textMuted} text-[0.65rem] rounded-md px-1.5 py-1 cursor-pointer outline-none hover:border-blue-500/50 transition-all focus:border-blue-500/50`}
                   >
-                    <option value="newest">🕐 Newest First</option>
-                    <option value="score_desc">🔴 Highest Score</option>
-                    <option value="score_asc">🟡 Lowest Score</option>
-                    <option value="city">🏙 By City</option>
-                    <option value="sla">⚠️ SLA Breached</option>
-                    <option value="type">🏥 By Type</option>
+                    <option value="newest">Newest First</option>
+                    <option value="score_desc">Highest Score</option>
+                    <option value="score_asc">Lowest Score</option>
+                    <option value="city">By City</option>
+                    <option value="sla">SLA Breached</option>
+                    <option value="type">By Type</option>
                   </select>
                   <button
                     onClick={handleClearAll}
@@ -692,8 +698,7 @@ export default function App() {
               </div>
 
               <div className="flex flex-col h-full overflow-hidden">
-                {/* Input Form Area */}
-                <div className="p-4 border-b border-gray-800 bg-[#121212]/50">
+                <div className={`p-4 border-b ${theme.border} ${theme.surfaceSoft}`}>
                   <form onSubmit={handleIngest} className="flex flex-col space-y-3 relative">
                     {imagePreview && (
                       <div className="relative w-20 h-20 mb-2 group">
@@ -711,14 +716,14 @@ export default function App() {
                       <textarea
                         value={ingestText}
                         onChange={e => setIngestText(e.target.value)}
-                        placeholder="Paste rescue ping or describe disaster imagery..."
-                        className={`w-full bg-[#1a1a1a] border border-gray-700 rounded-xl p-3 pb-10 text-xs text-gray-200 focus:outline-none focus:border-blue-500 min-h-[100px] shadow-inner resize-none ${shake ? 'animate-shake border-red-500' : ''}`}
+                        placeholder="Describe what you see — location, how many people, what's needed..."
+                        className={`w-full ${theme.surface} border ${theme.border} rounded-2xl p-3 pb-10 text-xs ${theme.text} focus:outline-none focus:border-blue-500 min-h-[100px] shadow-sm resize-none placeholder-zinc-500 dark:placeholder-zinc-400 ${shake ? 'animate-shake border-red-500' : ''}`}
                       />
                       <div className="absolute bottom-2 left-2 flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className={`p-2 rounded-lg border transition-all ${selectedImage ? 'bg-blue-600 border-blue-500 text-white' : 'bg-[#2a2a2a] border-gray-600 text-gray-400 hover:text-white hover:border-gray-500'}`}
+                          className={`p-2 rounded-xl border transition-all ${selectedImage ? 'bg-blue-600 border-blue-500 text-white' : `${theme.surfaceSoft} ${theme.border} ${theme.textMuted} hover:bg-white/[0.05] hover:text-white`}`}
                           title="Attach image for AI analysis"
                         >
                           <CameraIcon className="w-4 h-4" />
@@ -739,7 +744,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={isRecording ? stopRecording : startRecording}
-                        className={`absolute bottom-2 right-2 p-2 rounded-lg border transition-all ${isRecording ? 'bg-red-600 border-red-500 animate-pulse' : 'bg-[#2a2a2a] border-gray-600 text-gray-400 hover:text-white hover:border-gray-500'}`}
+                        className={`absolute bottom-2 right-2 p-2 rounded-xl border transition-all ${isRecording ? 'bg-red-600 border-red-500 animate-pulse text-white' : `${theme.surfaceSoft} ${theme.border} ${theme.textMuted} hover:bg-white/[0.05] hover:text-white`}`}
                       >
                         {isRecording ? <StopCircleIcon className="w-4 h-4 text-white" /> : <MicrophoneIcon className="w-4 h-4" />}
                       </button>
@@ -747,7 +752,7 @@ export default function App() {
                     <button
                       type="submit"
                       disabled={isIngesting}
-                      className={`w-full font-bold py-3 rounded-xl text-xs shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${isIngesting ? 'bg-blue-600/50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
+                      className={`w-full font-bold py-3 rounded-2xl text-xs shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-white ${isIngesting ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                     >
                       {isIngesting ? (
                         <>
@@ -768,7 +773,6 @@ export default function App() {
                         </p>
                       )}
                     </div>
-                    {/* Progress Bar Container */}
                     <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5 overflow-hidden">
                       {isIngesting && (
                         <div className="h-full bg-blue-500 animate-progress-indeterminate"></div>
@@ -780,8 +784,7 @@ export default function App() {
                   </form>
                 </div>
 
-                {/* Vertical Scroll Area */}
-                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar bg-[#0f172a]/20">
+                <div className={`flex-1 overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar ${theme.surfaceSoft}`} style={{ willChange: 'transform', contain: 'content' }}>
                   {selectedNeed && (
                     <button
                       onClick={handleClearSelection}
@@ -791,7 +794,7 @@ export default function App() {
                     </button>
                   )}
                   {getSortedNeeds().length === 0 && (
-                    <div className="flex flex-col items-center justify-center w-full text-gray-600 py-10 italic text-xs">
+                    <div className={`flex flex-col items-center justify-center w-full ${theme.textMuted} py-10 italic text-xs`}>
                       <p>Awaiting signals...</p>
                     </div>
                   )}
@@ -801,7 +804,7 @@ export default function App() {
                     return (
                       <div
                         key={need.id}
-                        className={`w-full p-4 rounded-xl border transition-all cursor-pointer hover:translate-x-1 relative shadow-md ${isResolved ? 'opacity-50 grayscale-[0.5] border-green-900/30' : selectedNeed?.id === need.id ? 'border-blue-500 ring-2 ring-blue-500/20 bg-[#252535]' : 'border-gray-800 bg-[#1a1a1a] hover:border-gray-600'}`}
+                        className={`w-full p-4 rounded-2xl border transition-all cursor-pointer hover:translate-x-1 relative shadow-sm ${isResolved ? 'opacity-50 grayscale border-green-200 bg-green-50/30' : selectedNeed?.id === need.id ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/50' : `${theme.border} ${theme.surface} hover:shadow-md`}`}
                         onClick={() => {
                           if (selectedNeed?.id === need.id) {
                             handleClearSelection();
@@ -813,16 +816,16 @@ export default function App() {
                         style={{ borderLeft: `4px solid ${isResolved ? '#10B981' : crisisStyle.borderColor}` }}
                       >
                         <div className="flex justify-between items-start mb-2">
-                          <span className="text-[10px] mono text-blue-400 font-bold uppercase tracking-widest">{need?.location?.name || 'Unknown'}</span>
-                          <span className="text-[9px] text-gray-500 mono bg-gray-900 px-1.5 py-0.5 rounded">
+                          <span className={`text-[10px] mono ${theme.accent} font-bold uppercase tracking-widest`}>{need?.location?.name || 'Unknown'}</span>
+                          <span className={`text-[9px] ${theme.textMuted} mono ${theme.surfaceSoft} px-1.5 py-0.5 rounded`}>
                             {need?.reportedAt ? format(need.reportedAt, 'HH:mm') : '--:--'}
                           </span>
                         </div>
                         <div className="mb-2">
-                          <h4 className="text-[13px] font-bold text-white capitalize flex items-center">
+                          <h4 className={`text-[13px] font-bold ${theme.text} capitalize flex items-center`}>
                             <span className="text-lg mr-2">{getCrisisStyle(need?.crisisType || 'other').icon}</span>
                             {need?.crisisType || 'Report'}
-                            {need.isLocal && (
+                            {(need as NeedEntity & { isLocal?: boolean }).isLocal && (
                               <span className="ml-2 px-1.5 py-0.5 bg-amber-500/20 text-amber-500 text-[8px] font-black uppercase rounded border border-amber-500/30 tracking-tighter">
                                 ⚡ Local Parse
                               </span>
@@ -833,7 +836,7 @@ export default function App() {
                           <span className={`font-bold ${getGoldenHourColor(need?.reportedAt || now)}`}>
                             {need?.reportedAt ? formatDistanceToNow(need.reportedAt) : '??'} ago
                           </span>
-                          <span className="text-xs text-gray-400 font-medium">Score: <span className="text-white font-bold">{(need?.criticalityScore || 0).toFixed(0)}</span></span>
+                          <span className={`text-xs ${theme.textMuted} font-medium`}>Score: <span className={`${theme.text} font-bold`}>{(need?.criticalityScore || 0).toFixed(0)}</span></span>
                         </div>
                       </div>
                     );
@@ -842,40 +845,61 @@ export default function App() {
               </div>
             </section>
 
-            {/* PANEL 2: Global Heatmap - Moved to Right */}
-            <section className="flex-1 bg-[#1e1e1e] rounded-2xl border border-gray-800 overflow-hidden shadow-2xl flex flex-col relative h-[750px]">
-              <div className="p-3 absolute top-3 left-4 z-[1000] pointer-events-none">
-                <div className="inline-block bg-[rgba(7,11,20,0.85)] backdrop-blur-xl px-3.5 py-2 rounded-xl border border-white/10 pointer-events-auto shadow-2xl flex items-center space-x-4">
-                  <h2 className="text-[13px] font-bold text-white flex items-center">
-                    <span className="flex items-center text-[#EF4444] text-[0.55rem] font-black tracking-widest mr-3 border border-[#EF4444]/30 bg-[#EF4444]/10 px-1.5 py-0.5 rounded shadow-[0_0_10px_rgba(239,68,68,0.2)]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444] animate-pulse mr-1.5">LIVE</span>
+            <section className={`flex-1 ${theme.surface} rounded-[2rem] border ${theme.border} overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col relative h-[750px]`}>
+              {/* Map Controls Overlay */}
+              <div className="absolute top-4 left-4 z-[1000] pointer-events-none">
+                <div className="bg-[#1C2128]/90 backdrop-blur-md p-1.5 rounded-2xl border border-gray-700/50 shadow-[0_8px_30px_rgba(0,0,0,0.4)] pointer-events-auto flex items-center gap-4">
+
+                  {/* Left Side: Title & Live Indicator */}
+                  <div className="flex items-center pl-3">
+                    <span className="relative flex h-2 w-2 mr-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                     </span>
-                    Heatmap
-                  </h2>
-                  <div className="h-6 w-px bg-white/10"></div>
-                  <div className="flex bg-[#222]/50 p-1 rounded-lg border border-gray-800/50 shadow-inner">
+                    <h2 className="text-sm font-bold text-gray-100 tracking-wide mr-3">MAP</h2>
+                    <span className="text-[9px] font-black text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20 uppercase tracking-widest shadow-sm">
+                      Live
+                    </span>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="w-px h-5 bg-gray-700/80"></div>
+
+                  {/* Right Side: Map Layer Toggles */}
+                  <div className="flex bg-[#0B0F14] p-1 rounded-xl border border-gray-800/80 shadow-inner">
                     <button
                       onClick={() => setMapLayer('dark')}
-                      className={`px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all ${mapLayer === 'dark' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${mapLayer === 'dark' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
                     >
                       Dark
                     </button>
                     <button
+                      onClick={() => setMapLayer('light')}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${mapLayer === 'light' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                    >
+                      Light
+                    </button>
+                    <button
                       onClick={() => setMapLayer('satellite')}
-                      className={`px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all ${mapLayer === 'satellite' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${mapLayer === 'satellite' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
                     >
                       Satellite
                     </button>
                   </div>
+
                 </div>
               </div>
 
               <div className="flex-1 relative">
-                <MapContainer center={center} zoom={5} style={mapContainerStyle} zoomControl={false} scrollWheelZoom={true} attributionControl={false}>
+                <MapContainer center={center} zoom={5} style={mapContainerStyle} zoomControl={false} scrollWheelZoom={true} attributionControl={false} preferCanvas={true}>
                   <ChangeView center={selectedNeed ? [selectedNeed.location.lat, selectedNeed.location.lng] : center} zoom={selectedNeed ? 14 : 5} />
-                  {mapLayer === 'dark' ? (
+                  {mapLayer === 'dark' && (
                     <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>' />
-                  ) : (
+                  )}
+                  {mapLayer === 'light' && (
+                    <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>' />
+                  )}
+                  {mapLayer === 'satellite' && (
                     <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community' />
                   )}
                   <HeatmapOverlay data={heatmapData} />
@@ -898,7 +922,6 @@ export default function App() {
                   ))}
                 </MapContainer>
               </div>
-              {/* Map Legend */}
               <div className="absolute bottom-4 left-4 z-[1000] bg-[rgba(7,11,20,0.85)] backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 shadow-2xl flex items-center space-x-4 text-[10px] font-bold uppercase tracking-wider">
                 <div className="flex items-center">
                   <span className="w-2 h-2 rounded-full bg-[#EF4444] mr-2"></span>
@@ -912,35 +935,33 @@ export default function App() {
             </section>
           </div>
 
-          {/* PANEL 3: Dispatch Central */}
-          <section className="bg-[#1e1e1e] rounded-2xl border border-gray-800 overflow-hidden shadow-2xl flex flex-col">
-            <div className="p-5 border-b border-gray-800 bg-[#252525]">
-              <h2 className="text-xl font-bold flex items-center text-white">
-                <PaperAirplaneIcon className="h-6 w-6 mr-3 text-indigo-400" />
+          <section className={`${theme.surface} rounded-[2rem] border ${theme.border} overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex flex-col`}>
+            <div className={`p-5 border-b ${theme.border} ${theme.surface}`}>
+              <h2 className={`text-xl font-bold flex items-center ${theme.text}`}>
+                <PaperAirplaneIcon className="h-6 w-6 mr-3 text-indigo-500" />
                 Dispatch & Coordination Center
               </h2>
             </div>
 
             <div className="p-8">
               {!selectedNeed ? (
-                <div className="h-[300px] flex flex-col items-center justify-center text-center p-6 bg-[#121212]/30 rounded-2xl border border-dashed border-gray-700 animate-fade-in">
+                <div className={`h-[300px] flex flex-col items-center justify-center text-center p-6 ${theme.surfaceSoft} rounded-[2rem] border border-dashed ${theme.border} animate-fade-in`}>
                   <div className="w-20 h-20 rounded-full bg-indigo-900/20 border border-indigo-500/20 flex items-center justify-center mb-6 text-indigo-400">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                     </svg>
                   </div>
-                  <h3 className="font-bold text-xl text-gray-200 mb-2">Ready for Intelligent Dispatch</h3>
-                  <p className="text-gray-500 max-w-[360px] leading-relaxed">Select any crisis report from the signals panel or map to activate AI-powered volunteer matching.</p>
+                  <h3 className={`font-bold text-xl ${theme.text} mb-2`}>Ready for Intelligent Dispatch</h3>
+                  <p className={`${theme.textMuted} max-w-[360px] leading-relaxed`}>Select any crisis report from the signals panel or map to activate AI-powered volunteer matching.</p>
                 </div>
               ) : (
                 <div className="flex flex-col xl:flex-row gap-10 animate-fade-in">
-                  {/* Need Overview */}
                   <div className="flex-1 space-y-8">
-                    <div className="bg-[#121212] p-8 rounded-2xl border border-gray-800 shadow-2xl relative">
+                    <div className={`${theme.surfaceSoft} p-8 rounded-2xl border ${theme.border} shadow-sm relative`}>
                       <div className="flex justify-between items-start mb-6">
                         <div>
-                          <h3 className="text-xs font-bold text-blue-400 uppercase tracking-[0.2em] mb-2">Selected Incident</h3>
-                          <p className="text-3xl font-bold text-white tracking-tight">{selectedNeed?.location?.name || 'Emergency Site'}</p>
+                          <h3 className={`text-xs font-bold ${theme.accent} uppercase tracking-[0.2em] mb-2`}>Selected Incident</h3>
+                          <p className={`text-3xl font-bold ${theme.text} tracking-tight`}>{selectedNeed?.location?.name || 'Emergency Site'}</p>
                         </div>
                         <div className={`px-4 py-2 rounded-xl text-xl font-bold shadow-lg ${getScoreColor(selectedNeed?.criticalityScore || 0)}`}>
                           {(selectedNeed?.criticalityScore || 0).toFixed(0)} <span className="text-xs opacity-60">SCORE</span>
@@ -948,12 +969,12 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-6">
-                        <div className="bg-white/5 p-4 rounded-xl">
-                          <p className="text-[10px] uppercase font-bold text-gray-500 mb-1">Crisis Type</p>
-                          <p className="text-white font-bold capitalize">{selectedNeed?.crisisType || 'General'}</p>
+                        <div className={`${theme.surface} border ${theme.border} rounded-xl p-4 shadow-sm transition-all duration-300`}>
+                          <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Crisis Type</p>
+                          <p className={`${theme.text} font-bold capitalize`}>{selectedNeed?.crisisType || 'General'}</p>
                         </div>
-                        <div className="bg-white/5 p-4 rounded-xl">
-                          <p className="text-[10px] uppercase font-bold text-gray-500 mb-1">Status</p>
+                        <div className={`${theme.surface} border ${theme.border} rounded-xl p-4 shadow-sm transition-all duration-300`}>
+                          <p className={`text-[10px] uppercase font-bold ${theme.textMuted} mb-1`}>Status</p>
                           <p className="text-indigo-400 font-bold">{selectedNeed?.status || 'OPEN'}</p>
                         </div>
                       </div>
@@ -986,25 +1007,24 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Dispatch Results Section */}
                   <div className="flex-1 space-y-6">
                     {dispatchResult ? (
                       <div className="space-y-6 animate-in slide-in-from-right-10 duration-700">
-                        <div className="bg-gradient-to-br from-[#10B981]/10 to-[#3B82F6]/10 p-8 rounded-2xl border border-green-500/20 shadow-2xl relative overflow-hidden">
+                        <div className="bg-gradient-to-br from-[#10B981]/10 to-[#3B82F6]/10 p-8 rounded-2xl border border-green-500/20 shadow-sm relative overflow-hidden">
                           <div className="absolute top-0 right-0 p-4">
                             <span className="bg-green-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">Optimized Match</span>
                           </div>
-                          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Assigned Resource</h4>
+                          <h4 className={`text-xs font-bold ${theme.textMuted} uppercase tracking-widest mb-4`}>Assigned Resource</h4>
                           <div className="flex justify-between items-center mb-6">
-                            <span className="text-4xl font-bold text-white tracking-tight">{dispatchResult.volunteer.name}</span>
+                            <span className={`text-4xl font-bold ${theme.text} tracking-tight`}>{dispatchResult.volunteer.name}</span>
                           </div>
-                          <div className="bg-[#121212] p-6 rounded-xl border border-gray-800 relative shadow-2xl mt-4">
-                            <p className="text-sm text-gray-300 italic font-mono leading-relaxed">"{dispatchResult.dispatchMessage}"</p>
+                          <div className={`${theme.surface} p-6 rounded-xl border ${theme.border} relative shadow-sm mt-4`}>
+                            <p className={`text-sm ${theme.text} italic font-mono leading-relaxed`}>"{dispatchResult.dispatchMessage}"</p>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="h-full flex flex-col items-center justify-center text-center p-8 bg-[#121212]/20 rounded-2xl border border-gray-800 italic text-gray-600">
+                      <div className={`h-full flex flex-col items-center justify-center text-center p-8 ${theme.surfaceSoft} rounded-[2rem] border ${theme.border} italic ${theme.textMuted}`}>
                         <p>Awaiting AI Match calculation...</p>
                       </div>
                     )}
@@ -1026,125 +1046,128 @@ export default function App() {
     return '';
   };
 
-  const navItems = [
-    { path: '/', label: 'Dashboard', icon: '⚡' },
-    { path: '/volunteers', label: 'Volunteers', icon: '👥' },
-    { path: '/analytics', label: 'Analytics', icon: '📊' },
-    { path: '/history', label: 'History', icon: '📋' },
-  ];
-
-  return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0D1421] text-white font-sans">
-      {/* SIDEBAR */}
-      <div
-        className={`flex-shrink-0 h-full bg-[#0D1421] border-r border-white/[0.06] flex flex-col transition-all duration-300 ease-in-out relative z-[2000] ${isSidebarCollapsed ? 'w-[60px] overflow-visible' : 'w-[240px] overflow-hidden'}`}
+    return (
+    <Routes>
+      <Route path="/report" element={<ReportPage />} />
+      <Route path="/*" element={
+        <div className={`flex h-screen w-screen overflow-hidden ${theme.bg} ${theme.text} font-sans transition-all duration-300`}>
+      <aside
+        className={`fixed left-4 top-4 bottom-4 z-[2000] flex flex-col transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isSidebarCollapsed ? 'w-[72px]' : 'w-[260px]'
+          } bg-[#0D0F14]/80 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-visible group`}
       >
-        {/* Toggle Button - Floating on the right border */}
-        <div className="absolute -right-3.5 top-1/2 -translate-y-1/2 z-[1000]">
-          <button
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="w-7 h-7 rounded-full bg-[#0D1421] border border-white/10 flex items-center justify-center hover:bg-[#1e293b] hover:border-blue-500/50 transition-all shadow-[0_0_15px_rgba(0,0,0,0.5)] active:scale-90 group"
-            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            <ChevronLeftIcon className={`w-3.5 h-3.5 text-gray-400 group-hover:text-white transition-transform duration-300 ${isSidebarCollapsed ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
+        <button
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-12 bg-blue-600 border border-blue-400/30 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-blue-500 transition-all z-[2100] active:scale-90 opacity-0 group-hover:opacity-100"
+          title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          <ChevronLeftIcon className={`w-3.5 h-3.5 transition-transform duration-500 ${isSidebarCollapsed ? 'rotate-180' : ''}`} />
+        </button>
 
-        {/* Logo */}
-        <div className={`p-6 border-b border-white/[0.06] flex flex-col ${isSidebarCollapsed ? 'items-center px-2' : ''}`}>
-          <div className="flex items-center space-x-2">
-            <BoltIcon className="w-5 h-5 text-blue-500 flex-shrink-0" />
-            {!isSidebarCollapsed && <span className="font-bold text-[1rem] tracking-tight whitespace-nowrap">CommunityPulse</span>}
+        <div className={`p-8 mb-4 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'space-x-4'}`}>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-900/20 flex-shrink-0">
+            <BoltIcon className="w-6 h-6 text-white" />
           </div>
           {!isSidebarCollapsed && (
-            <div className="flex items-center mt-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse mr-2"></span>
-              <span className="text-[#10B981] text-[0.65rem] uppercase tracking-wider font-bold">Live</span>
+            <div className="flex flex-col">
+              <span className="font-black text-lg tracking-tight text-white leading-none">TONIC</span>
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">Command Center</span>
             </div>
           )}
         </div>
 
-        {/* Nav Links */}
-        <div className={`flex-1 flex flex-col gap-2 p-3 ${isSidebarCollapsed ? 'items-center overflow-y-visible' : 'overflow-y-auto custom-scrollbar'}`}>
+        <nav className="flex-1 px-4 space-y-2 overflow-y-auto custom-scrollbar overflow-x-hidden mt-4">
           {navItems.map(item => {
             const isActive = location.pathname === item.path;
             return (
               <div
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={`group relative rounded-lg cursor-pointer transition-all duration-150 flex items-center ${isSidebarCollapsed ? 'w-10 h-10 justify-center' : 'w-full px-[14px] py-[10px] gap-2.5'} ${isActive ? 'bg-blue-500/12 border border-blue-500/25 text-white' : 'text-[#8B9CB8] border border-transparent hover:bg-white/[0.04] hover:text-white'}`}
+                className={`relative group/item cursor-pointer flex items-center transition-all duration-300 ease-out rounded-xl ${isSidebarCollapsed ? 'justify-center h-12 w-12 mx-auto' : 'px-4 py-3 gap-4 h-12'
+                  } ${isActive
+                    ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-[0_0_15px_rgba(37,99,235,0.1)]'
+                    : 'text-gray-400 hover:bg-white/5 hover:text-gray-100 border border-transparent'
+                  }`}
               >
-                <span className="text-sm flex-shrink-0">{item.icon}</span>
-                {!isSidebarCollapsed && <span className="font-medium text-[0.85rem] whitespace-nowrap">{item.label}</span>}
+                {isActive && (
+                  <div className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-blue-500 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
+                )}
 
-                {/* Collapsed Tooltip */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-5 px-3 py-2 bg-[#1e293b] text-white text-[11px] font-bold rounded-xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.7)] opacity-0 group-hover:opacity-100 pointer-events-none transition-all translate-x-[-10px] group-hover:translate-x-0 z-[7000] whitespace-nowrap">
+
+                <span className={`flex-shrink-0 transition-transform duration-300 ${isActive ? 'scale-110 text-blue-400' : 'group-hover/item:scale-110 group-hover/item:-rotate-3 text-gray-400 group-hover/item:text-gray-200'}`}>
+                  {item.icon}
+                </span>
+                {!isSidebarCollapsed && (
+                  <span className={`font-bold text-sm tracking-wide transition-all duration-300 ${isActive ? 'text-white' : 'text-inherit'}`}>
                     {item.label}
-                    <div className="absolute top-1/2 -translate-y-1/2 right-full border-[5px] border-transparent border-r-[#1e293b]"></div>
+                  </span>
+                )}
+
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-4 px-3 py-2 bg-[#0B0F14]/90 backdrop-blur-md text-white text-[11px] font-bold rounded-xl border border-white/10 shadow-2xl opacity-0 group-hover/item:opacity-100 pointer-events-none transition-all translate-x-[-10px] group-hover/item:translate-x-0 z-[7000] whitespace-nowrap">
+                    {item.label}
                   </div>
                 )}
               </div>
-            )
+            );
           })}
-        </div>
+        </nav>
 
-        {/* Status Card - Hide text when collapsed */}
-        <div className={`p-4 border-t border-white/[0.06] ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
-          {isSidebarCollapsed ? (
-            <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" title="System Operational"></div>
-          ) : (
-            <div className="bg-[#121927] rounded border border-white/[0.04] p-3 shadow-inner">
-              <p className="font-semibold text-[0.65rem] text-[#8B9CB8] uppercase tracking-wider mb-2">System Status</p>
-              <div className="flex items-center mb-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] mr-1.5"></span>
-                <p className="font-bold text-[0.75rem] text-[#10B981] uppercase tracking-wider">All systems operational</p>
-              </div>
-              <p className="text-[0.8rem] text-[#8B9CB8] font-mono font-bold">{timeStr}</p>
+        <div className={`p-6 border-t border-white/5 mt-auto ${isSidebarCollapsed ? 'items-center' : ''}`}>
+          {!isSidebarCollapsed && (
+            <div className="mb-4 px-2">
+              <button 
+                onClick={() => window.open('/report', '_blank')}
+                className="w-full py-2 px-3 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600/30 transition-all flex items-center justify-center group"
+              >
+                User Portal
+                <PaperAirplaneIcon className="w-3 h-3 ml-2 -rotate-45 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+              </button>
             </div>
           )}
-        </div>
-
-        {/* UN SDGs Addressed - Compact when collapsed */}
-        <div className={`p-4 border-t border-white/[0.06] pb-8 ${isSidebarCollapsed ? 'flex flex-col items-center gap-4 overflow-visible' : 'overflow-hidden'}`}>
-          {!isSidebarCollapsed && <p className="font-semibold text-[0.65rem] text-[#8B9CB8] uppercase tracking-[0.15em] mb-4">Humanitarian Impact</p>}
-          <div className={`flex gap-3 overflow-visible ${isSidebarCollapsed ? 'flex-col items-center' : 'flex-wrap'}`}>
+          {!isSidebarCollapsed && (
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-6 px-2">Global Impact</p>
+          )}
+          <div className={`flex gap-3 ${isSidebarCollapsed ? 'flex-col items-center' : 'flex-wrap px-2'}`}>
             {[
-              { id: 1, name: "No Poverty", color: "#E5243B" },
-              { id: 3, name: "Health & Well-being", color: "#4C9F38" },
-              { id: 11, name: "Sustainable Cities", color: "#FD9D24" },
-              { id: 13, name: "Climate Action", color: "#3F7E44" }
+              { id: 1, color: "bg-[#E5243B]", name: "No Poverty" },
+              { id: 3, color: "bg-[#4C9F38]", name: "Health" },
+              { id: 11, color: "bg-[#FD9D24]", name: "Cities" },
+              { id: 13, color: "bg-[#3F7E44]", name: "Climate" }
             ].map(sdg => (
               <div
                 key={sdg.id}
-                className="relative group flex items-center justify-center w-8 h-8 rounded-lg shadow-lg text-white font-black text-[10px] transition-all duration-300 hover:scale-110 cursor-default flex-shrink-0"
-                style={{ backgroundColor: sdg.color }}
+                className={`w-8 h-8 rounded-lg ${sdg.color} flex items-center justify-center text-white font-black text-[10px] shadow-lg hover:scale-110 transition-all cursor-default relative group/sdg`}
               >
                 {sdg.id}
-
-                {/* Tooltip */}
-                <div className={`absolute opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 z-[7000] whitespace-nowrap ${isSidebarCollapsed ? 'left-full ml-5 top-1/2 -translate-y-1/2 -translate-x-2 group-hover:translate-x-0' : 'bottom-12 left-1/2 -translate-x-1/2 translate-y-2 group-hover:translate-y-0'}`}>
-                  <div className="bg-[#1e293b] text-white text-[11px] font-bold px-3 py-2 rounded-xl border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.7)] flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: sdg.color }}></div>
-                    {sdg.name}
-                  </div>
-                  {/* Tooltip Arrow */}
-                  <div className={`absolute border-[6px] border-transparent ${isSidebarCollapsed ? 'right-full top-1/2 -translate-y-1/2 border-r-[#1e293b]' : 'top-full left-1/2 -translate-x-1/2 border-t-[#1e293b]'}`}></div>
+                <div className="absolute left-full ml-4 px-2 py-1 bg-black text-[9px] rounded opacity-0 group-hover/sdg:opacity-100 whitespace-nowrap z-50 pointer-events-none">
+                  {sdg.name}
                 </div>
               </div>
             ))}
           </div>
         </div>
-      </div>
+      </aside>
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col h-full bg-[#121212] overflow-hidden relative transition-all duration-300 ease-in-out">
-        {/* Top Bar inside main */}
-        <div className="h-[56px] flex-shrink-0 bg-[#070B14] border-b border-white/[0.06] px-6 flex justify-between items-center z-50">
-          <div className="flex items-center space-x-4">
-            <h2 className="font-bold text-[1rem] text-white">{getPageTitle()}</h2>
-            <div className="flex items-center gap-3 ml-4">
-              {/* Compact Emergency Call in Header */}
+      <div className={`flex-1 flex flex-col h-full ${theme.bg} overflow-hidden relative transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isSidebarCollapsed ? 'pl-[104px]' : 'pl-[292px]'} pr-4 py-4`}>
+        <div className={`flex-1 flex flex-col overflow-hidden ${theme.surface} border ${theme.border} rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative`}>
+          <div className={`h-[64px] flex-shrink-0 ${theme.surface} border-b ${theme.border} px-8 flex justify-between items-center z-50`}>
+            <div className="flex items-center space-x-4">
+              <h2 className={`font-bold text-lg tracking-tight ${theme.text}`}>{getPageTitle()}</h2>
+              <div className={`flex items-center gap-1.5 ml-4 ${theme.surfaceSoft} p-1 rounded-full border ${theme.border}`}>
+                <button
+                  onClick={() => setBgTheme('white')}
+                  className={`w-3.5 h-3.5 rounded-full bg-white border transition-all hover:scale-110 ${bgTheme === 'white' ? 'border-gray-500 ring-2 ring-offset-1 ring-gray-400' : 'border-gray-300'}`}
+                  title="Pure White"
+                />
+
+                <button
+                  onClick={() => setBgTheme('black')}
+                  className={`w-3.5 h-3.5 rounded-full bg-black border transition-all hover:scale-110 ${bgTheme === 'black' ? 'border-gray-500 ring-2 ring-offset-1 ring-gray-400' : 'border-gray-300'}`}
+                  title="Pure Black"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsVoiceOpen(true)}
                 className="bg-red-600/10 hover:bg-red-600/20 text-red-500 border border-red-500/30 w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-lg group relative"
@@ -1154,50 +1177,39 @@ export default function App() {
                 <PhoneIcon className="w-4 h-4 z-10" />
               </button>
 
-              {/* Simulate Crisis Trigger */}
               {!isSimulating ? (
                 <button onClick={startSimulation} className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center shadow-lg h-7">
                   <BoltIcon className="w-3 h-3 mr-1" /> Simulate Crisis
                 </button>
               ) : (
                 <button onClick={stopSimulation} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center animate-pulse h-7">
-                  <StopCircleIcon className="w-3 h-3 mr-1" /> Stop Sim ({simCount}/5)
+                  <BoltIcon className="w-3 h-3 mr-1" /> Stop Simulation
                 </button>
               )}
+
+              <div className="flex items-center ml-2">
+                <div
+                  className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-[10px] text-white shadow-[0_0_15px_rgba(37,99,235,0.3)] border border-blue-400/30 cursor-pointer hover:scale-105 transition-all"
+                  title="Administrator Profile"
+                >
+                  ADMIN
+                </div>
+              </div>
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            {offlineSyncMessage && (
-              <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded-full animate-pulse font-bold uppercase tracking-wider">
-                {offlineSyncMessage}
-              </span>
-            )}
-            {isOnline ? (
-              <span className="flex items-center text-green-400 bg-green-500/10 px-2 py-1 rounded-full text-xs font-bold border border-green-500/20"><SignalIcon className="w-3 h-3 mr-1" /> Online Mode</span>
-            ) : (
-              <span className="flex items-center text-red-400 bg-red-500/10 px-2 py-1 rounded-full text-xs font-bold border border-red-500/20"><SignalSlashIcon className="w-3 h-3 mr-1" /> Offline</span>
-            )}
-            <div
-              className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center font-black text-[10px] text-white shadow-[0_0_15px_rgba(37,99,235,0.3)] border border-blue-400/30 cursor-pointer hover:scale-105 transition-all"
-              title="Administrator Profile"
-            >
-              ADMIN
-            </div>
+
+          <div className="flex-1 overflow-hidden">
+            <Routes>
+              <Route path="/" element={dashboardContent} />
+              <Route path="/volunteers" element={<VolunteersPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/ai-assistant" element={<AiAssistantPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              
+            </Routes>
           </div>
         </div>
 
-        {/* Content Router */}
-        <div className="flex-1 overflow-hidden">
-          <Routes>
-            <Route path="/" element={dashboardContent} />
-            <Route path="/volunteers" element={<VolunteersPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/ai-assistant" element={<AiAssistantPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-          </Routes>
-        </div>
-
-        {/* Critical Alerts Toast Stack */}
         <div className="fixed top-6 right-6 z-[3000] flex flex-col gap-2 pointer-events-none">
           {criticalAlerts.map(alert => (
             <div key={alert.id} className="pointer-events-auto w-[320px] bg-[#1a0a0a] border border-[#EF4444] rounded-xl p-4 shadow-[0_8px_32px_rgba(239,68,68,0.2)] animate-slide-in relative overflow-hidden">
@@ -1234,10 +1246,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* AI Assistant Floating Toggle & Panel (Dashboard Only) */}
       {location.pathname === '/' && (
         <>
-          {/* Floating Pill Toggle Button */}
           <button
             onClick={() => setIsAiChatOpen(!isAiChatOpen)}
             className={`fixed right-0 top-1/2 -translate-y-1/2 z-[2000] flex items-center justify-center gap-2 px-4 py-3 rounded-l-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-bold text-sm shadow-[0_4px_20px_rgba(59,130,246,0.4)] transition-all duration-300 transform ${isAiChatOpen ? 'translate-x-0 w-12' : 'translate-x-0'}`}
@@ -1245,16 +1255,14 @@ export default function App() {
             {isAiChatOpen ? <span className="text-lg">✕</span> : <><SparklesIcon className="w-5 h-5" /> AI</>}
           </button>
 
-          {/* Sliding AI Panel */}
           <div
-            className={`fixed right-0 top-0 h-full bg-[#0D1421] border-l border-white/[0.08] shadow-2xl transition-all duration-300 ease-in-out z-[1900] flex flex-col overflow-hidden ${isAiChatOpen ? 'translate-x-0 w-[360px]' : 'translate-x-full w-[360px]'}`}
+            className={`fixed right-0 top-0 h-full bg-[#27272A] text-white border-l border-black/10 shadow-[-10px_0_30px_rgba(0,0,0,0.1)] transition-all duration-300 ease-in-out z-[1900] flex flex-col overflow-hidden ${isAiChatOpen ? 'translate-x-0 w-[360px]' : 'translate-x-full w-[360px]'}`}
           >
             <AiAssistantPage isEmbedded={true} />
           </div>
         </>
       )}
 
-      {/* AI Voice Assistant */}
       <VoiceAssistant isOpen={isVoiceOpen} onClose={() => setIsVoiceOpen(false)} apiBase={API_BASE} />
 
       <VoiceCallModal
@@ -1262,12 +1270,11 @@ export default function App() {
         onClose={() => setIsCallModalOpen(false)}
         onSubmit={(text) => {
           setIngestText(text);
-          // Auto-submit or just let user see it in the text box
           console.log("Transcribed Emergency Call:", text);
         }}
       />
     </div>
+      } />
+    </Routes>
   );
 }
-
-
