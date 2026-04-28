@@ -1,5 +1,3 @@
-<div align="center">
-
 # ⚡ CommunityPulse
 ### *When every second counts, intelligence scales.*
 
@@ -11,11 +9,7 @@
 [![Maps](https://img.shields.io/badge/Leaflet.js-Heatmaps-199900?style=for-the-badge&logo=leaflet&logoColor=white)](https://leafletjs.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
----
-
 > 🏆 *Built for [Hackathon Name] · Category: Crisis Tech / Civic AI*
-
-</div>
 
 ---
 
@@ -28,8 +22,6 @@ During a disaster, **coordination kills more time than the disaster itself.** Ci
 ---
 
 ## 🎬 See It In Action
-
-> *(Add a GIF or screenshot here — e.g., `![Demo](docs/demo.gif)`)*
 
 | Citizen Portal | Command Center | Dispatch Engine |
 |:-:|:-:|:-:|
@@ -196,11 +188,6 @@ MIT © 2025 CommunityPulse Contributors
 
 ---
 
-<div align="center">
-
 **Built with urgency. Deployed with care.**
 
 *If this project resonates with you, give it a ⭐ — it helps more builders find it.*
-
-</div>
-
