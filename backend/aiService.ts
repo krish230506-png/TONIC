@@ -1,4 +1,4 @@
-﻿import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { VolunteerProfile, NeedEntity } from '../shared/types';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -24,7 +24,7 @@ export class AIService {
         lastError = e;
         // Rotate on 429 (Quota), 404 (Not Found), or 503 (Overloaded)
         if (e.status === 429 || e.status === 404 || e.status === 503) {
-          console.warn(`âš ï¸ Model ${modelName} unavailable (${e.status}). Rotating...`);
+          console.warn(`⚠️ Model ${modelName} unavailable (${e.status}). Rotating...`);
           continue;
         }
         throw e;
@@ -99,7 +99,7 @@ export class AIService {
         return result;
       });
     } catch (e: any) {
-      console.warn('âš ï¸ All models exhausted or failed:', e.message || e);
+      console.warn('⚠️ All models exhausted or failed:', e.message || e);
       return null;
     }
   }
@@ -134,28 +134,52 @@ export class AIService {
   }
 
   static async generateDispatchMessage(volunteer: VolunteerProfile, need: NeedEntity): Promise<string> {
-    const prompt = `Generate exactly ONE short dispatch message to send to the volunteer ${volunteer.name} for ${need.crisisType} at ${need.location.name}. Do NOT offer multiple options or explain your reasoning. Do NOT use markdown formatting like ** or *. Output only the message text, nothing else. Example: "${volunteer.name}, please proceed to ${need.location.name} for ${need.crisisType} assistance. Urgent. Please confirm."`;
+    const prompt = `Act as a high-fidelity crisis coordination system. Generate a SINGLE, concise, professional dispatch message for ${volunteer.name} to handle a ${need.crisisType} emergency at ${need.location.name}. 
+    CRITICAL: 
+    - Output ONLY the message text.
+    - DO NOT provide multiple options. 
+    - DO NOT include conversational filler like "Here is your message" or introductory/concluding text.
+    - Maintain a tone of professional urgency.`;
+    
     try {
       return await this.callWithRotation(async (modelName) => {
         const model = this.getGenAI().getGenerativeModel({ model: modelName });
         const response = await model.generateContent(prompt);
-        return response.response.text().trim();
+        let text = response.response.text().trim();
+        // Remove any surrounding quotes that AI might add
+        if (text.startsWith('"') && text.endsWith('"')) {
+          text = text.substring(1, text.length - 1);
+        }
+        return text;
       });
     } catch (e) {
-      return `${volunteer.name}, please proceed to ${need.location.name} for ${need.crisisType} assistance. Urgent. Please confirm.`;
+      return `URGENT DISPATCH: ${volunteer.name}, please proceed to ${need.location.name} immediately for ${need.crisisType} assistance.`;
     }
   }
 
   static async askAssistant(messages: any[], contextData: any): Promise<string> {
-    const prompt = `Context: ${JSON.stringify(contextData)}. User: ${messages[messages.length - 1].content}`;
+    const systemPrompt = `You are the TONIC Crisis Intelligence Assistant. 
+    Your goal is to help rescue operators analyze data and make decisions.
+    
+    Current System Context (JSON): ${JSON.stringify(contextData)}
+    
+    Guidelines:
+    - Be concise, professional, and data-driven.
+    - Reference specific incidents or volunteers from the context if relevant.
+    - If you don't know something, say so.
+    - Do not speculate on life-safety without data.`;
+    
+    const userMessage = messages[messages.length - 1].content;
+    const finalPrompt = `${systemPrompt}\n\nUser Question: ${userMessage}`;
+
     try {
       return await this.callWithRotation(async (modelName) => {
         const model = this.getGenAI().getGenerativeModel({ model: modelName });
-        const response = await model.generateContent(prompt);
+        const response = await model.generateContent(finalPrompt);
         return response.response.text().trim();
       });
     } catch (e: any) {
-      return "[Local Intelligence Fallback] My cloud brain is resting. Please check the database manually.";
+      return "[Local Intelligence Fallback] My cloud connection is unstable. Please review the live dashboard data manually.";
     }
   }
 
