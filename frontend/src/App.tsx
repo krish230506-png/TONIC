@@ -1199,7 +1199,7 @@ export default function App() {
           </div>
           {!isSidebarCollapsed && (
             <div className="flex flex-col">
-              <span className="font-black text-lg tracking-tight text-white leading-none">TONIC</span>
+              <span className="font-black text-base tracking-tighter text-white leading-none">CommunityPulse</span>
               <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">Command Center</span>
             </div>
           )}
@@ -1284,7 +1284,7 @@ export default function App() {
         <div className={`flex-1 flex flex-col overflow-hidden ${theme.surface} border ${theme.border} rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative`}>
           <div className={`h-[64px] flex-shrink-0 ${theme.surface} border-b ${theme.border} px-8 flex justify-between items-center z-50`}>
             <div className="flex items-center space-x-4">
-              <h2 className={`font-bold text-lg tracking-tight ${theme.text}`}>{getPageTitle()}</h2>
+              <h2 className={`font-bold text-base tracking-tighter ${theme.text}`}>{getPageTitle()}</h2>
               <div className={`flex items-center gap-1.5 ml-4 ${theme.surfaceSoft} p-1 rounded-full border ${theme.border}`}>
                 <button
                   onClick={() => setBgTheme('white')}
